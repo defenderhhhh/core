@@ -6,15 +6,15 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Hashtable;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
 import java.util.StringTokenizer;
 import java.util.TimeZone;
-import java.util.regex.Matcher;
 
 import com.dotcms.repackage.org.apache.commons.beanutils.BeanUtils;
 import com.dotcms.repackage.org.apache.oro.text.regex.Pattern;
@@ -23,14 +23,13 @@ import com.dotcms.repackage.org.apache.oro.text.regex.Perl5Matcher;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.beans.Inode;
-import com.dotmarketing.beans.WebAsset;
+import com.dotmarketing.beans.MultiTree;
 import com.dotmarketing.business.APILocator;
 import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.DotIdentifierStateException;
 import com.dotmarketing.business.DotStateException;
 import com.dotmarketing.business.IdentifierAPI;
 import com.dotmarketing.business.PermissionAPI;
-import com.dotmarketing.business.Permissionable;
 import com.dotmarketing.business.Role;
 import com.dotmarketing.business.Treeable;
 import com.dotmarketing.cache.FolderCache;
@@ -43,13 +42,13 @@ import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotHibernateException;
 import com.dotmarketing.exception.DotRuntimeException;
 import com.dotmarketing.exception.DotSecurityException;
+import com.dotmarketing.factories.MultiTreeFactory;
 import com.dotmarketing.menubuilders.RefreshMenus;
 import com.dotmarketing.portlets.contentlet.model.Contentlet;
 import com.dotmarketing.portlets.fileassets.business.FileAsset;
 import com.dotmarketing.portlets.fileassets.business.IFileAsset;
 import com.dotmarketing.portlets.files.model.File;
 import com.dotmarketing.portlets.folders.model.Folder;
-import com.dotmarketing.portlets.htmlpageasset.model.HTMLPageAsset;
 import com.dotmarketing.portlets.htmlpageasset.model.IHTMLPage;
 import com.dotmarketing.portlets.htmlpages.factories.HTMLPageFactory;
 import com.dotmarketing.portlets.htmlpages.model.HTMLPage;
@@ -62,7 +61,6 @@ import com.dotmarketing.util.InodeUtils;
 import com.dotmarketing.util.Logger;
 import com.dotmarketing.util.UUIDGenerator;
 import com.dotmarketing.util.UtilMethods;
-import com.liferay.portal.language.LanguageUtil;
 import com.liferay.portal.model.User;
 
 /**
@@ -551,12 +549,17 @@ public class FolderFactoryImpl extends FolderFactory {
 		}
 		
 		//Content Pages
-		List<IHTMLPage> pageAssetList=new ArrayList<IHTMLPage>();
+		Set<IHTMLPage> pageAssetList=new HashSet<IHTMLPage>();
 		pageAssetList.addAll(APILocator.getHTMLPageAssetAPI().getWorkingHTMLPages(source, APILocator.getUserAPI().getSystemUser(), false));
 		pageAssetList.addAll(APILocator.getHTMLPageAssetAPI().getLiveHTMLPages(source, APILocator.getUserAPI().getSystemUser(), false));
 		for(IHTMLPage page : pageAssetList) {
 		    Contentlet cont = APILocator.getContentletAPI().find(page.getInode(), APILocator.getUserAPI().getSystemUser(), false);
-            APILocator.getContentletAPI().copyContentlet(cont, newFolder, APILocator.getUserAPI().getSystemUser(), false);
+            Contentlet newContent = APILocator.getContentletAPI().copyContentlet(cont, newFolder, APILocator.getUserAPI().getSystemUser(), false);
+            List<MultiTree> pageContents = MultiTreeFactory.getMultiTree(cont.getIdentifier());
+            for(MultiTree m : pageContents){
+            	MultiTree mt = new MultiTree(newContent.getIdentifier(), m.getParent2(), m.getChild());
+            	MultiTreeFactory.saveMultiTree(mt);
+            }
             pagesCopied.put(cont.getInode(), new IHTMLPage[] {page , APILocator.getHTMLPageAssetAPI().fromContentlet(cont)});
 		}
 		
@@ -621,6 +624,7 @@ public class FolderFactoryImpl extends FolderFactory {
         }
         CacheLocator.getNavToolCache().removeNavByPath( folderId.getHostId(), folderId.getParentPath() );
         fc.removeFolder( folder, folderId );
+		CacheLocator.getIdentifierCache().removeFromCacheByIdentifier(folderId.getId());
 
 		User systemUser = APILocator.getUserAPI().getSystemUser();
 		boolean contains = false;
@@ -691,8 +695,7 @@ public class FolderFactoryImpl extends FolderFactory {
 
 		if(folder.isShowOnMenu())
 			RefreshMenus.deleteMenu(folder);
-
-
+		
 		folder.setModDate(new Date());
 		save(folder);
 
@@ -789,7 +792,7 @@ public class FolderFactoryImpl extends FolderFactory {
 
 			// republishes the page to reset the VTL_SERVLETURI variable
 			if (page.isLive()) {
-				PageServices.invalidate(page);
+				PageServices.invalidateAll(page);
 			}
 
 		}
@@ -951,9 +954,10 @@ public class FolderFactoryImpl extends FolderFactory {
 	protected boolean renameFolder(Folder folder, String newName, User user, boolean respectFrontEndPermissions) throws DotDataException, DotSecurityException {
 		// checking if already exists
 		Identifier ident = APILocator.getIdentifierAPI().loadFromDb(folder.getIdentifier());
-		String newPath=ident.getParentPath()+newName;
+		StringBuilder newPath = new StringBuilder(ident.getParentPath()).append(newName);
+		if(!newName.endsWith("/")) newPath.append("/"); // Folders must end with '/'
 		Host host = APILocator.getHostAPI().find(folder.getHostId(),user,respectFrontEndPermissions);
-		Folder nFolder=findFolderByPath(newPath, host);
+		Folder nFolder = findFolderByPath(newPath.toString(), host);
 		if(UtilMethods.isSet(nFolder.getInode()) && !folder.getIdentifier().equals(nFolder.getIdentifier()))
 			return false;
 
@@ -1256,6 +1260,7 @@ public class FolderFactoryImpl extends FolderFactory {
 
 	@Override
 	protected void save(Folder folderInode) throws DotDataException {
+		HibernateUtil.getSession().clear();
 		HibernateUtil.saveOrUpdate(folderInode);
 	}
 

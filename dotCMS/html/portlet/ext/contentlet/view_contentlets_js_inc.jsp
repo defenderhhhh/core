@@ -13,7 +13,6 @@
 <%@page import="java.util.List"%>
 <%@page import="com.dotmarketing.business.Role"%>
 <%@page import="com.dotmarketing.portlets.structure.model.Structure"%>
-<%@page import="com.dotmarketing.cache.StructureCache"%>
 <%@page import="com.dotmarketing.portlets.workflows.model.*"%>
 
 <%boolean canReindex= APILocator.getRoleAPI().doesUserHaveRole(user,APILocator.getRoleAPI().loadRoleByKey(Role.CMS_POWER_USER))|| com.dotmarketing.business.APILocator.getRoleAPI().doesUserHaveRole(user,com.dotmarketing.business.APILocator.getRoleAPI().loadCMSAdminRole());%>
@@ -1664,6 +1663,12 @@
                 }
         }
 
+        /* Displays the Push Publish dialog. If the content is archived, allow 
+        users to ONLY do a "Remove", not a "Push" or "Push & Remove". */
+        function remotePublish(objId, referrer, isArchived) {
+            pushHandler.showDialog(objId, false, isArchived);
+        }
+
         function fillResultsTable (headers, data) {
                 headerLength = headers.length;
                 var table = document.getElementById("results_table");
@@ -1881,7 +1886,7 @@
 
 
 						if(enterprise && sendingEndpoints && workflowMandatory=="false") {
-								popupMenus += "<div dojoType=\"dijit.MenuItem\" iconClass=\"sServerIcon\" onClick=\"remotePublish('" + cellData.inode + "','<%= referer %>');\"><%=LanguageUtil.get(pageContext, "Remote-Publish") %></div>";
+								popupMenus += "<div dojoType=\"dijit.MenuItem\" iconClass=\"sServerIcon\" onClick=\"remotePublish('" + cellData.inode + "','<%= referer %>', " + deleted + ");\"><%=LanguageUtil.get(pageContext, "Remote-Publish") %></div>";
 
 								popupMenus += "<div dojoType=\"dijit.MenuItem\" iconClass=\"bundleIcon\" onClick=\"addToBundle('" + cellData.inode + "','<%= referer %>');\"><%=LanguageUtil.get(pageContext, "Add-To-Bundle") %></div>";
 						}

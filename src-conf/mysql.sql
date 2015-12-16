@@ -835,7 +835,7 @@ create table User_ (
 	userId varchar(100) not null primary key,
 	companyId varchar(100) not null,
 	createDate datetime null,
-	password_ varchar(100) null,
+	password_ longtext null,
 	passwordEncrypted tinyint,
 	passwordExpirationDate datetime null,
 	passwordReset tinyint,
@@ -1826,8 +1826,8 @@ create table clickstream (
    clickstream_id bigint not null auto_increment,
    cookie_id varchar(255),
    user_id varchar(255),
-   start_date datetime,
-   end_date datetime,
+   start_date datetime(3),
+   end_date datetime(3),
    referer varchar(255),
    remote_address varchar(255),
    remote_hostname varchar(255),
@@ -2546,7 +2546,7 @@ alter table structure modify column velocity_var_name varchar(255) not null;
 alter table structure add constraint unique_struct_vel_var_name unique (velocity_var_name);
 
 DROP PROCEDURE IF EXISTS load_records_to_index;
-CREATE PROCEDURE load_records_to_index(IN server_id VARCHAR(100), IN records_to_fetch INT)
+CREATE PROCEDURE load_records_to_index(IN server_id VARCHAR(100), IN records_to_fetch INT, IN priority_level INT)
 BEGIN
 DECLARE v_id BIGINT;
 DECLARE v_inode_to_index VARCHAR(100);
@@ -2557,7 +2557,7 @@ DECLARE v_time_entered TIMESTAMP;
 DECLARE v_index_val VARCHAR(325);
 DECLARE v_dist_action INT;
 DECLARE cursor_end BOOL DEFAULT FALSE;
-DECLARE cur1 CURSOR FOR SELECT * FROM dist_reindex_journal WHERE serverid IS NULL or serverid='' ORDER BY priority ASC LIMIT 50 FOR UPDATE;
+DECLARE cur1 CURSOR FOR SELECT * FROM dist_reindex_journal WHERE serverid IS NULL or serverid='' AND priority <= priority_level ORDER BY priority ASC LIMIT records_to_fetch FOR UPDATE;
 DECLARE CONTINUE HANDLER FOR NOT FOUND SET cursor_end:=TRUE;
 
 DROP TEMPORARY TABLE IF EXISTS tmp_records_reindex;
@@ -2986,9 +2986,6 @@ ALTER TABLE tag ALTER COLUMN host_id set default 'SYSTEM_HOST';
 alter table tag add constraint tag_tagname_host unique (tagname, host_id);
 alter table tag_inode add constraint fk_tag_inode_tagid foreign key (tag_id) references tag (tag_id);
 
-alter table tag modify user_id varchar(9999);
-alter table tag modify user_id longtext;
-
 -- ****** Indicies Data Storage *******
 create table indicies (
   index_name varchar(30) primary key,
@@ -3034,7 +3031,7 @@ type VARCHAR(256), bundle_id VARCHAR(256) , target text);
 CREATE TABLE IF NOT EXISTS publishing_queue_audit (
 	bundle_id VARCHAR(36) PRIMARY KEY NOT NULL,
 	status INTEGER,
-	status_pojo text,
+	status_pojo LONGTEXT,
 	status_updated DATETIME,
 	create_date DATETIME);
 
@@ -3112,6 +3109,7 @@ create table publishing_pushed_assets(
 
 CREATE INDEX idx_pushed_assets_1 ON publishing_pushed_assets (bundle_id);
 CREATE INDEX idx_pushed_assets_2 ON publishing_pushed_assets (environment_id);
+CREATE INDEX idx_pushed_assets_3 ON publishing_pushed_assets (asset_id, environment_id);
 
 CREATE INDEX idx_pub_qa_1 ON publishing_queue_audit (status);
 
@@ -3153,7 +3151,7 @@ create table folders_ir(folder varchar(255), local_inode varchar(36), remote_ino
 create table structures_ir(velocity_name varchar(255), local_inode varchar(36), remote_inode varchar(36), endpoint_id varchar(36), PRIMARY KEY (local_inode, endpoint_id));
 create table schemes_ir(name varchar(255), local_inode varchar(36), remote_inode varchar(36), endpoint_id varchar(36), PRIMARY KEY (local_inode, endpoint_id));
 create table htmlpages_ir(html_page varchar(255), local_working_inode varchar(36), local_live_inode varchar(36), remote_working_inode varchar(36), remote_live_inode varchar(36),local_identifier varchar(36), remote_identifier varchar(36), endpoint_id varchar(36), language_id bigint, PRIMARY KEY (local_working_inode, language_id, endpoint_id));
-
+create table fileassets_ir(file_name varchar(255), local_working_inode varchar(36), local_live_inode varchar(36), remote_working_inode varchar(36), remote_live_inode varchar(36),local_identifier varchar(36), remote_identifier varchar(36), endpoint_id varchar(36), language_id bigint, PRIMARY KEY (local_working_inode, language_id, endpoint_id));
 
 ---Server Action
 create table cluster_server_action(
@@ -3168,3 +3166,25 @@ create table cluster_server_action(
 	time_out_seconds bigint not null,
 	PRIMARY KEY (server_action_id)
 );
+
+-- Rules Engine
+create table dot_rule(id varchar(36) primary key,name varchar(255) not null,fire_on varchar(20),short_circuit boolean,host varchar(36) not null,folder varchar(36) not null,priority int default 0,enabled boolean default false,mod_date datetime);alter table dot_rule add constraint rule_name_host unique (name, host);
+create table rule_condition_group(id varchar(36) primary key,rule_id varchar(36) references dot_rule(id),operator varchar(10) not null,priority int default 0,mod_date datetime);
+create table rule_condition(id varchar(36) primary key,name varchar(255) not null,conditionlet text not null,condition_group varchar(36) references rule_condition_group(id),comparison varchar(36) not null,operator varchar(10) not null,priority int default 0,mod_date datetime);
+create table rule_condition_value (id varchar(36) primary key,
+	condition_id varchar(36) references rule_condition(id),paramkey VARCHAR(255) NOT NULL,value text,priority int default 0);
+create table rule_action (id varchar(36) primary key,name varchar(255) not null,rule_id varchar(36) references dot_rule(id),priority int default 0,actionlet text not null,mod_date datetime);
+create table rule_action_pars(id varchar(36) primary key,rule_action_id varchar(36) references rule_action(id), paramkey varchar(255) not null,value text);
+create index idx_rules_fire_on on dot_rule (fire_on);
+
+CREATE TABLE analytic_summary_user_visits (
+    user_id VARCHAR(255) NOT NULL,
+    host_id VARCHAR(36) NOT NULL,
+    visits BIGINT NOT NULL,
+    last_start_date DATETIME(3) NOT NULL,
+    PRIMARY KEY (user_id, host_id),
+    UNIQUE (user_id, host_id)
+);
+CREATE INDEX idx_analytic_summary_user_visits_1 ON analytic_summary_user_visits (user_id);
+CREATE INDEX idx_analytic_summary_user_visits_2 ON analytic_summary_user_visits (host_id);
+CREATE INDEX idx_analytic_summary_user_visits_3 ON analytic_summary_user_visits (last_start_date);

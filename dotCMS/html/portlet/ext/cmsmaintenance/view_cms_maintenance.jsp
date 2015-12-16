@@ -9,9 +9,8 @@
 <%@page import="com.dotcms.content.elasticsearch.business.ESIndexAPI"%>
 <%@page import="java.lang.management.RuntimeMXBean"%>
 <%@page import="java.lang.management.ManagementFactory"%>
-<%@page import="com.dotmarketing.business.DotGuavaCacheAdministratorImpl"%>
-<%@page import="com.dotmarketing.cache.H2CacheLoader"%>
-<%@page import="com.dotmarketing.business.DotJBCacheAdministratorImpl"%>
+<%@page import="com.dotmarketing.business.ChainableCacheAdministratorImpl"%>
+<%@page import="com.dotmarketing.business.cache.provider.h2.H2CacheLoader"%>
 <%@page import="com.dotmarketing.business.CacheLocator"%>
 <%@ page import="java.util.Calendar"%>
 <%@ page import="com.dotcms.repackage.javax.portlet.WindowState"%>
@@ -119,8 +118,30 @@ function checkReindexation () {
 	CMSMaintenanceAjax.getReindexationProgress(checkReindexationCallback);
 }
 
+/** Stops de re-indexation process and clears the database table that contains 
+    the remaining non re-indexed records. */
 function stopReIndexing(){
 	CMSMaintenanceAjax.stopReindexation(checkReindexationCallback);
+}
+
+/** Stops de re-indexation process and clears the database table that contains 
+    the remaining non re-indexed records. Moreover, switches the current index 
+    to point to the new one. */
+function stopReIndexingAndSwitchover() {
+	dijit.byId('stopReindexAndSwitch').set('label', '<%= LanguageUtil.get(pageContext,"Switching-To-New-Index") %>');
+	dijit.byId('stopReindexAndSwitch').set('disabled', true);
+	CMSMaintenanceAjax.stopReindexationAndSwitchover(checkReindexationCallback);
+}
+
+/** Downloads the main information of the records that could not be re-indexed 
+    as a .CSV file*/
+function downloadFailedAsCsv() {
+	var href = "<portlet:actionURL windowState='<%= WindowState.MAXIMIZED.toString() %>'>";
+    href += "<portlet:param name='struts_action' value='/ext/cmsmaintenance/view_cms_maintenance' />";
+    href += "<portlet:param name='cmd' value='export-failed-as-csv' />";      
+    href += "<portlet:param name='referer' value='<%= java.net.URLDecoder.decode(referer, "UTF-8") %>' />";       
+    href += "</portlet:actionURL>";
+    window.location.href=href;
 }
 
 function optimizeCallback() {
@@ -496,7 +517,7 @@ function refreshCache(){
 	var x = dijit.byId("cacheStatsCp");
 	var y =Math.floor(Math.random()*1123213213);
 
-	<%if(CacheLocator.getCacheAdministrator().getImplementationClass().equals(DotGuavaCacheAdministratorImpl.class)){%>
+	<%if(CacheLocator.getCacheAdministrator().getImplementationClass().equals(ChainableCacheAdministratorImpl.class)){%>
 		if(dijit.byId("showSize").checked){
 			x.attr( "href","/html/portlet/ext/cmsmaintenance/cachestats_guava.jsp?showSize=true&r=" + y  );
 
@@ -949,19 +970,21 @@ var createRow = function (tableId, rowInnerHtml, className, id) {
     }, tableNode );
 };
 
-function killSession(sessionId) {
-	dojo.style(dijit.byId('invalidateButton-'+sessionId).domNode,{display:"none",visibility:"hidden"});
+function killSessionById(sessionId) {
+    var invalidateButtonElem = dijit.byId("invalidateButtonNode-"+sessionId);
+
+	dojo.style(invalidateButtonElem.domNode,{display:"none",visibility:"hidden"});
 	dojo.query('#killSessionProgress-'+sessionId).style({display:"block"});
 	UserSessionAjax.invalidateSession(sessionId,{
 			callback:function() {
-				dojo.style(dijit.byId('invalidateButton-'+sessionId).domNode,{display:"block",visibility:"visible"});
+				dojo.style(invalidateButtonElem.domNode,{display:"block",visibility:"visible"});
 			    dojo.query('#killSessionProgress-'+sessionId).style({display:"none"});
-			    dijit.byId('invalidateButton-'+sessionId).set('disabled',true);
+			    invalidateButtonElem.set('disabled',true);
 
 			    showDotCMSSystemMessage('<%=UtilMethods.escapeSingleQuotes(LanguageUtil.get(pageContext,"logged-users-tab-killed"))%>');
 			},
 			errorHandler:function(message) {
-				dojo.style(dijit.byId('invalidateButton-'+sessionId).domNode,{display:"block",visibility:"visible"});
+				dojo.style(invalidateButtonElem.domNode,{display:"block",visibility:"visible"});
 			    dojo.query('#killSessionProgress-'+sessionId).style({display:"none"});
 
 			    showDotCMSSystemMessage('<%=UtilMethods.escapeSingleQuotes(LanguageUtil.get(pageContext,"logged-users-tab-notkilled"))%>');
@@ -996,7 +1019,9 @@ function loadUsers() {
     dojo.query('#loggedUsersProgress').style({display:"block"});
 	UserSessionAjax.getSessionList({
 		callback: function(sessionList) {
-
+		    // Append prefix to invalidate button id
+			var invalidateButtonIdPrefix = "invalidateButtonNode-";
+		    
             dojo.query('#loggedUsersProgress').style({display:"none"});
 
 			if(sessionList.size() > 0) {
@@ -1011,36 +1036,38 @@ function loadUsers() {
 					html+="<td> ";
 					if("<%=session.getId()%>" !=session.sessionId ){
 						html+=" <img style='display:none;' id='killSessionProgress-"+session.sessionId+"' src='/html/images/icons/round-progress-bar.gif'/> ";
-						html+=" <button id='invalidateButtonNode-"+session.sessionId+"'></button>";
+						html+=" <button id='" + invalidateButtonIdPrefix + session.sessionId + "'></button>";
 					}
 
 					html+=" </td>";
 
                     //Creating the row and adding it to the table
-                    createRow(tableId, html, rowsClass, null)
+                    createRow(tableId, html, rowsClass, "loggedUser-"+session.sessionId)
 				}
 
 				for(var i=0;i<sessionList.size();i++) {
                     var session=sessionList[i];
 
-                    var id = "invalidateButton-" + session.sessionId;
+                    var id = invalidateButtonIdPrefix + session.sessionId;
 
                     //Verify if a button widget with this id exist, if it exist we must delete firts before to try to create a new one
-                    var button = dijit.byId(id);
-                    if (button) {
-                        button.destroyRecursive();
-                    }
+                    if (dojo.byId(id)) {
+                    	var button = dijit.byId(id);
+                    	if(button) {
+                    		button.destroyRecursive();
+                    	}
 
-                    new dijit.form.Button({
-                    	id: id,
-                        label: "<%= UtilMethods.escapeDoubleQuotes(LanguageUtil.get(pageContext,"logged-users-tab-killsession")) %>",
-                        iconClass: "deleteIcon",
-                        "class": "killsessionButton",
-                        sid : session.sessionId,
-                        onClick: function(){
-                            killSession(this.sid);
-                        }
-                    }, "invalidateButtonNode-"+session.sessionId);
+                        new dijit.form.Button({
+                            id: id,
+                            label: "<%= UtilMethods.escapeDoubleQuotes(LanguageUtil.get(pageContext,"logged-users-tab-killsession")) %>",
+                            iconClass: "deleteIcon",
+                            "class": "killsessionButton",
+                            sid : session.sessionId,
+                            onClick: function(){
+                                killSessionById(this.sid);
+                            }
+                        }, invalidateButtonIdPrefix + session.sessionId);
+                    }
 				}
 			}
 		},
@@ -1499,6 +1526,12 @@ dd.leftdl {
                             <button dojoType="dijit.form.Button"  iconClass="reindexIcon" onClick="stopReIndexing();">
                                 <%= LanguageUtil.get(pageContext,"Stop-Reindexation") %>
                             </button>
+                            <button dojoType="dijit.form.Button"  iconClass="resolveIcon" id="stopReindexAndSwitch" onClick="stopReIndexingAndSwitchover();">
+                                <%= LanguageUtil.get(pageContext,"Stop-Reindexation-And-Make-Active") %>
+                            </button>
+                            <button dojoType="dijit.form.Button"  iconClass="downloadIcon" onClick="downloadFailedAsCsv();">
+                                <%= LanguageUtil.get(pageContext,"Download-Failed-Records-As-CSV") %>
+                            </button>
                         </td>
                     </tr>
                 </table>
@@ -1732,7 +1765,7 @@ dd.leftdl {
 			               	<tr>
 			               		<td>
 			               			<%= LanguageUtil.get(pageContext,"ASSETS_SEARCH_AND_REPLACE_Host") %>
-		               			    <select dojoType="dijit.form.FilteringSelect"  multiple="true" name="selectAssetHostInode" id="selectAssetHostInode" autocomplete="false"  invalidMessage="Invalid host name">
+		               			    <select dojoType="dijit.form.FilteringSelect"  multiple="true" name="selectAssetHostInode" id="selectAssetHostInode" autocomplete="false"  invalidMessage="Invalid site name">
 										<option selected="selected" value="all"><%= LanguageUtil.get(pageContext,"ASSETS_SEARCH_AND_REPLACE_All") %></option>
 										<%	String hostNames="";
 											String hostIdentifier="";

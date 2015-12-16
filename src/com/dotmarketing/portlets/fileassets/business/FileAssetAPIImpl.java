@@ -1,5 +1,18 @@
 package com.dotmarketing.portlets.fileassets.business;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.zip.GZIPInputStream;
+
+import com.dotcms.repackage.org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import com.dotcms.repackage.org.apache.commons.io.FileUtils;
+import com.dotcms.repackage.org.apache.commons.io.IOUtils;
+import com.dotcms.repackage.org.apache.tika.Tika;
 import com.dotcms.tika.TikaUtils;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Identifier;
@@ -27,20 +40,6 @@ import com.dotmarketing.util.Logger;
 import com.dotmarketing.util.UtilMethods;
 import com.liferay.portal.model.User;
 import com.liferay.util.FileUtil;
-
-import com.dotcms.repackage.org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
-import com.dotcms.repackage.org.apache.commons.io.FileUtils;
-import com.dotcms.repackage.org.apache.commons.io.IOUtils;
-import com.dotcms.repackage.org.apache.tika.Tika;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.zip.GZIPInputStream;
 
 /**
  * This class is a bridge impl that will support the older
@@ -195,7 +194,14 @@ public class FileAssetAPIImpl implements FileAssetAPI {
 				Folder folder = APILocator.getFolderAPI().findFolderByPath(ident.getParentPath(), host, systemUser, false);
 				fa.setFolder(folder.getInode());
 			}catch(Exception e){
-				Logger.warn(this, "Unable to convert contentlet to file asset " + con, e);
+				try{
+					User systemUser = APILocator.getUserAPI().getSystemUser();
+					Host host = APILocator.getHostAPI().find(con.getHost(), systemUser , false);
+					Folder folder = APILocator.getFolderAPI().find(con.getFolder(), systemUser, false);
+					fa.setFolder(folder.getInode());
+				}catch(Exception e1){
+					Logger.warn(this, "Unable to convert contentlet to file asset " + con, e1);
+				}
 			}
 		}
 		return fa;
@@ -276,28 +282,39 @@ public class FileAssetAPIImpl implements FileAssetAPI {
 			FileAsset fa = fromContentlet(fileAssetCont);
 			String ext = fa.getExtension();
 			if(!fileNameExists(host, folder, newName+ "." +ext, id.getId())){			    
-			    if(fa.isLive())
-					isfileAssetContLive = true;				
-				File oldFile = fileAssetCont.getBinary(BINARY_FIELD);
+			    if(fa.isLive()) {
+					isfileAssetContLive = true;
+			    }
+			    File oldFile = fileAssetCont.getBinary(BINARY_FIELD);
 				File newFile = new File(oldFile.getPath().substring(0,oldFile.getPath().indexOf(oldFile.getName()))+newName+"."+ext);
-				FileUtils.moveFile(oldFile, newFile);
-				fileAssetCont.setInode(null);
-				fileAssetCont.setFolder(folder.getInode());
-				fileAssetCont.setBinary(BINARY_FIELD, newFile);
-				final String newFileName=newName+"."+ext;
-				fileAssetCont.setStringProperty(FileAssetAPI.TITLE_FIELD, newFileName);
-				fileAssetCont.setStringProperty(FileAssetAPI.FILE_NAME_FIELD, newFileName);
-				fileAssetCont= APILocator.getContentletAPI().checkin(fileAssetCont, user, respectFrontendRoles);
-				if(isfileAssetContLive)
-					 APILocator.getVersionableAPI().setLive(fileAssetCont);
-
-				LiveCache.removeAssetFromCache(fileAssetCont);
-		    	LiveCache.addToLiveAssetToCache(fileAssetCont);
-		    	WorkingCache.removeAssetFromCache(fileAssetCont);
-		   		WorkingCache.addToWorkingAssetToCache(fileAssetCont);
-		   		RefreshMenus.deleteMenu(folder);
-		   		CacheLocator.getNavToolCache().removeNav(folder.getHostId(), folder.getInode());
-		   		CacheLocator.getIdentifierCache().removeFromCacheByVersionable(fileAssetCont);
+				try {
+					FileUtils.copyFile(oldFile, newFile);
+					fileAssetCont.setInode(null);
+					fileAssetCont.setFolder(folder.getInode());
+					fileAssetCont.setBinary(BINARY_FIELD, newFile);
+					final String newFileName=newName+"."+ext;
+					fileAssetCont.setStringProperty(FileAssetAPI.TITLE_FIELD, newFileName);
+					fileAssetCont.setStringProperty(FileAssetAPI.FILE_NAME_FIELD, newFileName);
+					fileAssetCont= APILocator.getContentletAPI().checkin(fileAssetCont, user, respectFrontendRoles);
+					if(isfileAssetContLive) {
+						 APILocator.getVersionableAPI().setLive(fileAssetCont);
+					}
+					LiveCache.removeAssetFromCache(fileAssetCont);
+					LiveCache.addToLiveAssetToCache(fileAssetCont);
+					WorkingCache.removeAssetFromCache(fileAssetCont);
+					WorkingCache.addToWorkingAssetToCache(fileAssetCont);
+					RefreshMenus.deleteMenu(folder);
+					CacheLocator.getNavToolCache().removeNav(folder.getHostId(), folder.getInode());
+					CacheLocator.getIdentifierCache().removeFromCacheByVersionable(fileAssetCont);
+				} catch (Exception e) {
+					Logger.error(this, "Unable to rename file asset to "
+							+ newName + " for asset " + id.getId(), e);
+					throw e;
+				} finally {
+					if (newFile != null) {
+						FileUtils.deleteQuietly(newFile);
+					}
+				}
 				return true;
 			}
 		}
@@ -431,10 +448,31 @@ public class FileAssetAPIImpl implements FileAssetAPI {
     	
     }
 	
-	
-	
-	
-	
+	/**
+	 * This method returns the relative path for assets
+     * 
+     * @return the relative folder of where assets are stored
+	 */
+	public String getRelativeAssetsRootPath() {
+        String path = "";
+        path = Config.getStringProperty("ASSET_PATH");
+        return path;
+    }
+
+    /**
+     * This method returns the root path for assets
+     * 
+     * @return the root folder of where assets are stored
+     */
+    public String getRealAssetsRootPath() {
+        String realPath = Config.getStringProperty("ASSET_REAL_PATH");
+        if (UtilMethods.isSet(realPath) && !realPath.endsWith(java.io.File.separator))
+            realPath = realPath + java.io.File.separator;
+        if (!UtilMethods.isSet(realPath))
+            return FileUtil.getRealPath(getRelativeAssetsRootPath());
+        else
+            return realPath;
+    }
 
 	public String getRealAssetPath(String inode) {
         String _inode = inode;
@@ -484,4 +522,70 @@ public class FileAssetAPIImpl implements FileAssetAPI {
         return IOUtils.toString(input);
     }
 
+    /**
+     * Cleans up thumbnails folder from a contentlet file asset, it uses the
+     * identifier to remove the generated folder.
+     * 
+     * <p>
+     * Note: the thumbnails are generated once, so when the image is updated
+     * then we need to clean the old thumbnails; that way it will generate a new
+     * one.
+     * </p>
+     * 
+     * @param contentlet
+     */
+    public void cleanThumbnailsFromContentlet(Contentlet contentlet) {
+        if (contentlet.getStructure().getStructureType() == Structure.STRUCTURE_TYPE_FILEASSET) {
+            this.cleanThumbnailsFromFileAsset(APILocator.getFileAssetAPI().fromContentlet(
+                    contentlet));
+            return;
+        }
+
+        Logger.warn(this, "Contentlet parameter is NOT a fileasset.");
+    }
+
+    /**
+     * Cleans up thumbnails folder for an specific asset, it uses the identifier
+     * to remove the generated folder.
+     * 
+     * <p>
+     * Note: the thumbnails are generated once, so when the image is updated
+     * then we need to clean the old thumbnails; that way it will generate a new
+     * one.
+     * </p>
+     * 
+     * @param fileAsset
+     */
+    public void cleanThumbnailsFromFileAsset(IFileAsset fileAsset) {
+        // Wiping out the thumbnails and resized versions
+        // http://jira.dotmarketing.net/browse/DOTCMS-5911
+        final String inode = fileAsset.getInode();
+        if (UtilMethods.isSet(inode)) {
+            final String realAssetPath = APILocator.getFileAPI().getRealAssetPath();
+            java.io.File tumbnailDir = new java.io.File(realAssetPath + java.io.File.separator
+                    + "dotGenerated" + java.io.File.separator + inode.charAt(0)
+                    + java.io.File.separator + inode.charAt(1));
+            if (tumbnailDir != null) {
+                java.io.File[] files = tumbnailDir.listFiles();
+                if (files != null) {
+                    for (java.io.File iofile : files) {
+                        try {
+                            if (iofile.getName().startsWith("dotGenerated_")) {
+                                iofile.delete();
+                            }
+                        } catch (SecurityException e) {
+                            Logger.error(
+                                    this,
+                                    "EditFileAction._saveWorkingFileData(): "
+                                            + iofile.getName()
+                                            + " cannot be erased. Please check the file permissions.");
+                        } catch (Exception e) {
+                            Logger.error(this,
+                                    "EditFileAction._saveWorkingFileData(): " + e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

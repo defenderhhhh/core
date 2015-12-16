@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.dotcms.repackage.junit.framework.Assert;
+import com.dotcms.repackage.net.sf.hibernate.Session;
 import com.dotcms.repackage.org.junit.After;
 import com.dotcms.repackage.org.junit.Before;
 import com.dotcms.repackage.org.junit.BeforeClass;
@@ -12,7 +13,6 @@ import com.dotmarketing.beans.ContainerStructure;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.business.APILocator;
 import com.dotmarketing.business.CacheLocator;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.common.db.DotConnect;
 import com.dotmarketing.portlets.containers.model.Container;
 import com.dotmarketing.util.UUIDGenerator;
@@ -32,6 +32,10 @@ public class HibernateUtilTest {
     @After
     @Before
     public void prep() throws Exception {
+    	Session session = HibernateUtil.getSession();
+    	if (session != null) {
+    		session.clear();
+    	}
         HibernateUtil.closeSession();
     }
     
@@ -52,7 +56,7 @@ public class HibernateUtilTest {
         
         List<ContainerStructure> containerStructureList = new ArrayList<ContainerStructure>();
         ContainerStructure cs=new ContainerStructure();
-        cs.setStructureId(StructureCache.getStructureByVelocityVarName("webPageContent").getInode());
+        cs.setStructureId(CacheLocator.getContentTypeCache().getStructureByVelocityVarName("webPageContent").getInode());
         cs.setCode("$body");
         containerStructureList.add(cs);
         container = APILocator.getContainerAPI().save(container, containerStructureList, host, user, false);
@@ -90,7 +94,7 @@ public class HibernateUtilTest {
         
         List<ContainerStructure> containerStructureList = new ArrayList<ContainerStructure>();
         ContainerStructure cs=new ContainerStructure();
-        cs.setStructureId(StructureCache.getStructureByVelocityVarName("webPageContent").getInode());
+        cs.setStructureId(CacheLocator.getContentTypeCache().getStructureByVelocityVarName("webPageContent").getInode());
         cs.setCode("$body");
         containerStructureList.add(cs);
         container = APILocator.getContainerAPI().save(container, containerStructureList, host, user, false);
@@ -104,7 +108,7 @@ public class HibernateUtilTest {
         container.setPreLoop("pre"); container.setPostLoop("post");
         containerStructureList = new ArrayList<ContainerStructure>();
         cs=new ContainerStructure();
-        cs.setStructureId(StructureCache.getStructureByVelocityVarName("webPageContent").getInode());
+        cs.setStructureId(CacheLocator.getContentTypeCache().getStructureByVelocityVarName("webPageContent").getInode());
         cs.setCode("$body"); containerStructureList.add(cs);
         container = APILocator.getContainerAPI().save(container, containerStructureList, host, user, false);
         String cInode2=container.getInode();

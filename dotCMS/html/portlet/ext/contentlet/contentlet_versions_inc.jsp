@@ -78,12 +78,7 @@
 %>
 	<tr  <%=str_style%>>
 		<td nowrap="nowrap" width="50" align="center">
-		<%if(ver.isWorking()){%>
-			<img src="/html/images/icons/status-away.png" />
-		<%} %>
-		<%if(ver.isLive()){%>
-			<img src="/html/images/icons/status.png" />
-		<%} %>
+			<%=UtilHTML.getVersionStatusIcons(c) %>
 		</td>
 		<td nowrap="nowrap">
 		<% if (!working) {  %>

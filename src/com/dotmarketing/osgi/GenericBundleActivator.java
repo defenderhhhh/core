@@ -1,16 +1,31 @@
 package com.dotmarketing.osgi;
 
+import com.dotcms.enterprise.cache.provider.CacheProviderAPI;
+import com.dotcms.repackage.org.apache.felix.http.proxy.DispatcherTracker;
 import com.dotcms.repackage.org.apache.struts.action.ActionForward;
 import com.dotcms.repackage.org.apache.struts.action.ActionMapping;
 import com.dotcms.repackage.org.apache.struts.config.ActionConfig;
 import com.dotcms.repackage.org.apache.struts.config.ForwardConfig;
 import com.dotcms.repackage.org.apache.struts.config.ModuleConfig;
+import com.dotcms.repackage.org.osgi.framework.Bundle;
+import com.dotcms.repackage.org.osgi.framework.BundleActivator;
+import com.dotcms.repackage.org.osgi.framework.BundleContext;
+import com.dotcms.repackage.org.osgi.framework.ServiceReference;
 import com.dotcms.repackage.org.tuckey.web.filters.urlrewrite.NormalRule;
 import com.dotcms.repackage.org.tuckey.web.filters.urlrewrite.Rule;
 import com.dotmarketing.business.APILocator;
 import com.dotmarketing.business.Interceptor;
+import com.dotmarketing.business.cache.CacheOSGIService;
+import com.dotmarketing.business.cache.provider.CacheProvider;
 import com.dotmarketing.cms.factories.PublicCompanyFactory;
+import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.filters.DotUrlRewriteFilter;
+import com.dotmarketing.portlets.languagesmanager.model.Language;
+import com.dotmarketing.portlets.rules.actionlet.RuleActionlet;
+import com.dotmarketing.portlets.rules.actionlet.RuleActionletOSGIService;
+import com.dotmarketing.portlets.rules.business.RulesAPI;
+import com.dotmarketing.portlets.rules.conditionlet.Conditionlet;
+import com.dotmarketing.portlets.rules.conditionlet.ConditionletOSGIService;
 import com.dotmarketing.portlets.workflows.actionlet.WorkFlowActionlet;
 import com.dotmarketing.portlets.workflows.business.WorkflowAPI;
 import com.dotmarketing.portlets.workflows.business.WorkflowAPIOsgiService;
@@ -18,6 +33,7 @@ import com.dotmarketing.quartz.QuartzUtils;
 import com.dotmarketing.quartz.ScheduledTask;
 import com.dotmarketing.util.Logger;
 import com.dotmarketing.util.OSGIUtil;
+import com.dotmarketing.util.UtilMethods;
 import com.dotmarketing.util.VelocityUtil;
 import com.liferay.portal.ejb.PortletManager;
 import com.liferay.portal.ejb.PortletManagerFactory;
@@ -28,17 +44,13 @@ import com.liferay.portal.model.Portlet;
 import com.liferay.portal.util.PortalUtil;
 import com.liferay.util.Http;
 import com.liferay.util.SimpleCachePool;
-import com.dotcms.repackage.org.apache.felix.http.proxy.DispatcherTracker;
+
 import org.apache.velocity.tools.view.PrimitiveToolboxManager;
 import org.apache.velocity.tools.view.ToolInfo;
 import org.apache.velocity.tools.view.servlet.ServletToolboxManager;
-import com.dotcms.repackage.org.osgi.framework.Bundle;
-import com.dotcms.repackage.org.osgi.framework.BundleActivator;
-import com.dotcms.repackage.org.osgi.framework.BundleContext;
-import com.dotcms.repackage.org.osgi.framework.ServiceReference;
 import org.quartz.SchedulerException;
 
-import java.io.File;
+import java.io.*;
 import java.net.URL;
 import java.util.*;
 
@@ -60,8 +72,14 @@ public abstract class GenericBundleActivator implements BundleActivator {
 
     private PrimitiveToolboxManager toolboxManager;
     private WorkflowAPIOsgiService workflowOsgiService;
+    private CacheOSGIService cacheOSGIService;
+    private ConditionletOSGIService conditionletOSGIService;
+    private RuleActionletOSGIService actionletOSGIService;
     private Collection<ToolInfo> viewTools;
     private Collection<WorkFlowActionlet> actionlets;
+    private Collection<Conditionlet> conditionlets;
+    private Collection<RuleActionlet> ruleActionlets;
+    private Collection<Class<CacheProvider>> cacheProviders;
     private Map<String, String> jobs;
     private Collection<ActionConfig> actions;
     private Collection<Portlet> portlets;
@@ -91,6 +109,10 @@ public abstract class GenericBundleActivator implements BundleActivator {
         forceToolBoxLoading( context );
         //Forcing the loading of the WorkflowService
         forceWorkflowServiceLoading( context );
+        //Forcing the loading of the Rule Engine Conditionlet
+        forceRuleConditionletServiceLoading(context);
+        //Forcing the loading of the CacheOSGIService
+        forceCacheProviderServiceLoading(context);
     }
 
     /**
@@ -199,6 +221,81 @@ public abstract class GenericBundleActivator implements BundleActivator {
                 if ( serviceRefSelected == null ) {
                     //Forcing the registration of our required services
                     workflowAPI.registerBundleService();
+                }
+            }
+        }
+    }
+
+    /**
+     * Is possible on certain scenarios to have our Rule Conditionlet without initialization, or most probably a Rule Conditionlet without
+     * set our required services, so we need to force things a little bit here, and register those services if it is necessary.
+     *
+     * @param context
+     */
+    private void forceRuleConditionletServiceLoading ( BundleContext context ) {
+
+        //Getting the service to register our Actionlet.
+        ServiceReference serviceRefSelected = context.getServiceReference( ConditionletOSGIService.class.getName() );
+        if ( serviceRefSelected == null ) {
+
+            //Forcing the loading of the Rule Conditionlet Service.
+            RulesAPI rulesAPI = APILocator.getRulesAPI();
+            if ( rulesAPI != null ) {
+
+                serviceRefSelected = context.getServiceReference( ConditionletOSGIService.class.getName() );
+                if ( serviceRefSelected == null ) {
+                    //Forcing the registration of our required services
+                    rulesAPI.registerBundleService();
+                }
+            }
+        }
+    }
+
+    /**
+     * Is possible on certain scenarios to have our Rule Conditionlet without initialization, or most probably a Rule Conditionlet without
+     * set our required services, so we need to force things a little bit here, and register those services if it is necessary.
+     *
+     * @param context
+     */
+    private void forceRuleActionletServiceLoading ( BundleContext context ) {
+
+        //Getting the service to register our Actionlet.
+        ServiceReference serviceRefSelected = context.getServiceReference( RuleActionletOSGIService.class.getName() );
+        if ( serviceRefSelected == null ) {
+
+            //Forcing the loading of the Rule Conditionlet Service.
+            RulesAPI rulesAPI = APILocator.getRulesAPI();
+            if ( rulesAPI != null ) {
+
+                serviceRefSelected = context.getServiceReference( ConditionletOSGIService.class.getName() );
+                if ( serviceRefSelected == null ) {
+                    //Forcing the registration of our required services
+                    rulesAPI.registerBundleService();
+                }
+            }
+        }
+    }
+
+    /**
+     * Is possible on certain scenarios to have our CacheProviderAPI without initialization, or most probably a CacheProviderAPI without
+     * set our required services, so we need to force things a little bit here, and register those services if it is necessary.
+     *
+     * @param context
+     */
+    private void forceCacheProviderServiceLoading ( BundleContext context ) {
+
+        //Getting the service to register our CacheProvider
+        ServiceReference serviceRefSelected = context.getServiceReference(CacheOSGIService.class.getName());
+        if ( serviceRefSelected == null ) {
+
+            //Forcing the loading of the CacheOSGIService
+            CacheProviderAPI cacheProviderAPI = APILocator.getCacheProviderPI();
+            if ( cacheProviderAPI != null ) {
+
+                serviceRefSelected = context.getServiceReference(CacheOSGIService.class.getName());
+                if ( serviceRefSelected == null ) {
+                    //Forcing the registration of our required services
+                    cacheProviderAPI.registerBundleService();
                 }
             }
         }
@@ -532,6 +629,145 @@ public abstract class GenericBundleActivator implements BundleActivator {
     }
 
     /**
+     * Register a Rules Engine RuleActionlet service
+     */
+    @SuppressWarnings("unchecked")
+    protected void registerRuleActionlet(BundleContext context, RuleActionlet actionlet) {
+
+        //Getting the service to register our Actionlet
+        ServiceReference serviceRefSelected = context.getServiceReference(RuleActionletOSGIService.class.getName());
+        if(serviceRefSelected == null) {
+            return;
+        }
+
+        if(ruleActionlets == null) {
+            ruleActionlets = new ArrayList<>();
+        }
+
+        this.actionletOSGIService = (RuleActionletOSGIService)context.getService(serviceRefSelected);
+        this.actionletOSGIService.addRuleActionlet(actionlet.getClass());
+        ruleActionlets.add(actionlet);
+        registerBundleResourceMessages(context);
+    }
+
+    /**
+     * Register a Rules Engine Conditionlet service
+     *
+     * @param context
+     * @param conditionlet
+     */
+    @SuppressWarnings ("unchecked")
+    protected void registerRuleConditionlet ( BundleContext context, Conditionlet conditionlet) {
+
+        //Getting the service to register our Conditionlet
+        ServiceReference serviceRefSelected = context.getServiceReference( ConditionletOSGIService.class.getName() );
+        if ( serviceRefSelected == null ) {
+            return;
+        }
+
+        if ( conditionlets == null ) {
+            conditionlets = new ArrayList<>();
+        }
+
+        this.conditionletOSGIService = (ConditionletOSGIService) context.getService( serviceRefSelected );
+        this.conditionletOSGIService.addConditionlet(conditionlet.getClass());
+        conditionlets.add( conditionlet );
+
+        Logger.info( this, "Added Rule Conditionlet: " + conditionlet.getId() );
+        registerBundleResourceMessages(context);
+    }
+
+    private void registerBundleResourceMessages(BundleContext context) {
+        //Register Language under /resources/messages folder.
+        Enumeration<String> langFiles = context.getBundle().getEntryPaths("messages");
+        while( langFiles.hasMoreElements() ){
+
+            String langFile = (String)langFiles.nextElement();
+
+            //We need to verify file is a language file.
+            String languageFilePrefix = "messages/Language_";
+            String languageFileSuffix = ".properties";
+            String languageFileDelimiter = "-";
+
+            //Validating Language file name: For example: Language_en-US.properties
+            if(langFile.startsWith(languageFilePrefix)
+                && langFile.contains(languageFileDelimiter)
+                && langFile.endsWith(languageFileSuffix)){
+
+                //Get the Language and Country Codes.
+                String languageCountry = langFile.replace(languageFilePrefix,"").replace(languageFileSuffix, "");
+                String languageCode = languageCountry.split(languageFileDelimiter)[0];
+                String countryCode = languageCountry.split(languageFileDelimiter)[1];
+
+                URL file = context.getBundle().getEntry(langFile);
+                Map<String, String> generalKeysToAdd = new HashMap<>();
+
+                try {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(file.openStream()));
+                    String line;
+                    while ((line = in.readLine()) != null){
+                        //Make sure line contains = sign.
+                        String delimiter = "=";
+                        if(line.contains(delimiter)){
+                            String[] keyValue = line.split(delimiter);
+                            String key = keyValue[0];
+                            String value = keyValue[1];
+
+                            generalKeysToAdd.put(key,value);
+                        }
+                    }
+                } catch (IOException e) {
+                    Logger.error(this.getClass(), "Error opening Language File: " + langFile, e);
+                }
+
+                try {
+                    Language languageObject = APILocator.getLanguageAPI().getLanguage(languageCode, countryCode);
+                    if(UtilMethods.isSet(languageObject.getLanguageCode())){
+
+                        APILocator.getLanguageAPI().saveLanguageKeys(languageObject,
+                                                                     generalKeysToAdd, new HashMap<>(), new HashSet<>());
+                    } else {
+                        Logger.warn(this.getClass(), "Country and Language do not exist: " + languageCountry);
+                    }
+
+                } catch (DotDataException e) {
+                    Logger.error(this.getClass(), "Error inserting language properties for: " + languageCountry, e);
+                }
+            }
+        }
+    }
+
+
+    /**
+     * Register a given CacheProvider implementation for a given region
+     *
+     * @param context
+     * @param cacheRegion
+     * @param provider
+     * @throws InstantiationException
+     * @throws IllegalAccessException
+     */
+    @SuppressWarnings ( "unchecked" )
+    protected void registerCacheProvider ( BundleContext context, String cacheRegion, Class<CacheProvider> provider ) throws Exception {
+
+        //Getting the service to register our Cache provider implementation
+        ServiceReference serviceRefSelected = context.getServiceReference(CacheOSGIService.class.getName());
+        if ( serviceRefSelected == null ) {
+            return;
+        }
+
+        if ( cacheProviders == null ) {
+            cacheProviders = new ArrayList<>();
+        }
+
+        this.cacheOSGIService = (CacheOSGIService) context.getService(serviceRefSelected);
+        this.cacheOSGIService.addCacheProvider(cacheRegion, provider);
+        cacheProviders.add(provider);
+
+        Logger.info(this, "Added Cache Provider: " + provider.getName());
+    }
+
+    /**
      * Register a ViewTool service using a ToolInfo object
      *
      * @param context
@@ -610,6 +846,9 @@ public abstract class GenericBundleActivator implements BundleActivator {
     protected void unregisterServices ( BundleContext context ) throws Exception {
 
         unregisterActionlets();
+        unregisterCacheProviders();
+        unregisterConditionlets();
+        unregisterRuleActionlets();
         unregisterViewToolServices();
         unregisterPreHooks();
         unregisterPostHooks();
@@ -672,7 +911,49 @@ public abstract class GenericBundleActivator implements BundleActivator {
             for ( WorkFlowActionlet actionlet : actionlets ) {
 
                 this.workflowOsgiService.removeActionlet( actionlet.getClass().getCanonicalName() );
-                Logger.info( this, "Removed actionlet: " + actionlet.getClass().getCanonicalName() );
+                Logger.info( this, "Removed actionlet: " + actionlet.getClass().getCanonicalName());
+            }
+        }
+    }
+
+    /**
+     * Unregister the registered Rules Conditionlet services
+     */
+    protected void unregisterConditionlets() {
+
+        if ( this.conditionletOSGIService != null && conditionletOSGIService != null ) {
+            for ( Conditionlet conditionlet : conditionlets ) {
+
+                this.conditionletOSGIService.removeConditionlet(conditionlet.getClass().getSimpleName());
+                Logger.info( this, "Removed Rules Conditionlet: " + conditionlet.getClass().getSimpleName());
+            }
+        }
+    }
+
+    /**
+     * Unregister the registered Rules Actionlets services
+     */
+    protected void unregisterRuleActionlets() {
+
+        if ( this.actionletOSGIService != null && actionletOSGIService != null ) {
+            for ( RuleActionlet actionlet : ruleActionlets ) {
+
+                this.actionletOSGIService.removeRuleActionlet(actionlet.getClass().getSimpleName());
+                Logger.info( this, "Removed Rules Actionlet: " + actionlet.getClass().getSimpleName());
+            }
+        }
+    }
+
+    /**
+     * Unregister the registered CacheProviders services
+     */
+    protected void unregisterCacheProviders () {
+
+        if ( this.cacheOSGIService != null && cacheProviders != null ) {
+            for ( Class<CacheProvider> provider : cacheProviders ) {
+
+                this.cacheOSGIService.removeCacheProvider(provider);
+                Logger.info(this, "Removed Cache Provider: " + provider.getCanonicalName());
             }
         }
     }

@@ -12,22 +12,22 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import com.dotcms.repackage.org.elasticsearch.ElasticsearchException;
-import com.dotcms.repackage.org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
-import com.dotcms.repackage.org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
-import com.dotcms.repackage.org.elasticsearch.action.admin.indices.status.IndexStatus;
-import com.dotcms.repackage.org.elasticsearch.action.bulk.BulkRequestBuilder;
-import com.dotcms.repackage.org.elasticsearch.action.index.IndexRequest;
-import com.dotcms.repackage.org.elasticsearch.client.Client;
-import com.dotcms.repackage.org.elasticsearch.client.IndicesAdminClient;
-import com.dotcms.repackage.org.elasticsearch.index.query.QueryBuilders;
-
 import com.dotcms.content.business.DotMappingException;
 import com.dotcms.content.elasticsearch.business.IndiciesAPI.IndiciesInfo;
 import com.dotcms.content.elasticsearch.util.ESClient;
+import com.dotcms.repackage.com.google.gson.Gson;
+import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.status.IndexStatus;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.client.Client;
+import org.elasticsearch.client.IndicesAdminClient;
+import org.elasticsearch.index.query.QueryBuilders;
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.DotStateException;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.common.db.DotConnect;
 import com.dotmarketing.db.DbConnectionFactory;
 import com.dotmarketing.db.HibernateUtil;
@@ -39,7 +39,6 @@ import com.dotmarketing.portlets.structure.factories.RelationshipFactory;
 import com.dotmarketing.portlets.structure.model.Relationship;
 import com.dotmarketing.util.Logger;
 import com.dotmarketing.util.UtilMethods;
-import com.dotcms.repackage.com.google.gson.Gson;
 
 public class ESContentletIndexAPI implements ContentletIndexAPI{
 	private static final ESIndexAPI iapi  = new ESIndexAPI();
@@ -455,7 +454,7 @@ public class ESContentletIndexAPI implements ContentletIndexAPI{
     }
 
 	public void removeContentFromIndexByStructureInode(String structureInode) throws DotDataException {
-	    String structureName=StructureCache.getStructureByInode(structureInode).getVelocityVarName();
+	    String structureName=CacheLocator.getContentTypeCache().getStructureByInode(structureInode).getVelocityVarName();
 	    IndiciesInfo info=APILocator.getIndiciesAPI().loadIndicies();
 
 	    // collecting indexes

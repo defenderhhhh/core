@@ -12,11 +12,11 @@ import javax.servlet.http.HttpServletRequest;
 
 import com.dotcms.repackage.org.directwebremoting.WebContext;
 import com.dotcms.repackage.org.directwebremoting.WebContextFactory;
-
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Inode;
 import com.dotmarketing.beans.Permission;
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.PermissionAPI;
 import com.dotmarketing.business.Permissionable;
 import com.dotmarketing.business.PermissionableObjectDWR;
@@ -24,7 +24,6 @@ import com.dotmarketing.business.Role;
 import com.dotmarketing.business.RoleAPI;
 import com.dotmarketing.business.web.UserWebAPI;
 import com.dotmarketing.business.web.WebAPILocator;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.common.db.DotConnect;
 import com.dotmarketing.db.HibernateUtil;
 import com.dotmarketing.exception.DotDataException;
@@ -42,6 +41,7 @@ import com.dotmarketing.portlets.files.model.File;
 import com.dotmarketing.portlets.folders.model.Folder;
 import com.dotmarketing.portlets.htmlpageasset.model.IHTMLPage;
 import com.dotmarketing.portlets.links.model.Link;
+import com.dotmarketing.portlets.rules.model.Rule;
 import com.dotmarketing.portlets.structure.model.Structure;
 import com.dotmarketing.portlets.templates.model.Template;
 import com.dotmarketing.quartz.job.ResetPermissionsJob;
@@ -269,6 +269,11 @@ public class PermissionAjax {
 					newSetOfPermissions.add(new Permission(Category.class.getCanonicalName(), asset.getPermissionId(), roleId,
 							Integer.parseInt(categoriesPermissions), true));
 				}
+                String rulesPermissions = permission.get("rulesPermissions");
+				if(rulesPermissions != null) {
+					newSetOfPermissions.add(new Permission(Rule.class.getCanonicalName(), asset.getPermissionId(), roleId,
+							Integer.parseInt(rulesPermissions), true));
+				}
 			}
 
 			if(newSetOfPermissions.size() > 0) {
@@ -413,7 +418,7 @@ public class PermissionAjax {
 		try {
 			// Retrieving the current user
 			User user = userWebAPI.getLoggedInUser(request);
-			Structure hostStrucuture = StructureCache.getStructureByVelocityVarName("Host");
+			Structure hostStrucuture = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 
 			if (InodeFactory.isInode(inodeOrIdentifier)) {
 				Inode inode = InodeFactory.find(inodeOrIdentifier);

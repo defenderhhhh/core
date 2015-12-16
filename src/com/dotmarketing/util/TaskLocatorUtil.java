@@ -19,6 +19,7 @@ import com.dotmarketing.fixtask.tasks.FixTask00040CheckFileAssetsMimeType;
 import com.dotmarketing.fixtask.tasks.FixTask00050FixInodesWithoutContentlets;
 import com.dotmarketing.fixtask.tasks.FixTask00060FixAssetType;
 import com.dotmarketing.fixtask.tasks.FixTask00070FixVersionInfo;
+import com.dotmarketing.fixtask.tasks.FixTask00080DeleteOrphanedContentTypeFields;
 import com.dotmarketing.startup.runalways.Task00001LoadSchema;
 import com.dotmarketing.startup.runalways.Task00009ClusterInitialize;
 import com.dotmarketing.startup.runalways.Task00010CheckAnonymousUser;
@@ -27,6 +28,7 @@ import com.dotmarketing.startup.runalways.Task00004LoadStarter;
 import com.dotmarketing.startup.runalways.Task00005LoadFixassets;
 import com.dotmarketing.startup.runalways.Task00006CreateSystemLayout;
 import com.dotmarketing.startup.runalways.Task00007RemoveSitesearchQuartzJob;
+
 import com.dotmarketing.startup.runonce.*;
 
 
@@ -50,6 +52,7 @@ public class TaskLocatorUtil {
 		ret.add(FixTask00050FixInodesWithoutContentlets.class);
 		ret.add(FixTask00060FixAssetType.class);
 		ret.add(FixTask00070FixVersionInfo.class);
+		ret.add(FixTask00080DeleteOrphanedContentTypeFields.class);
 		return ret;
 	}
 
@@ -131,7 +134,14 @@ public class TaskLocatorUtil {
         ret.add(Task03120AddInodeToContainerStructure.class);
 		ret.add(Task03130ActionletsFromPlugin.class);
 		ret.add(Task03135FixStructurePageDetail.class);
-
+		ret.add(Task03140AddFileAssetsIntegrityResultTable.class);
+		ret.add(Task03150LoweCaseURLOnVirtualLinksTable.class);
+		ret.add(Task03160PublishingPushedAssetsTable.class);
+		ret.add(Task03165ModifyLoadRecordsToIndex.class);
+		ret.add(Task03500RulesEngineDataModel.class);
+		ret.add(Task03505PublishingQueueAuditTable.class);
+		ret.add(Task03510CreateDefaultPersona.class);
+		ret.add(Task03515AlterPasswordColumnFromUserTable.class);
         return ret;
     }
 

@@ -836,7 +836,7 @@ create table User_ (
 	userId varchar(100) not null primary key,
 	companyId varchar(100) not null,
 	createDate datetime null,
-	password_ varchar(100) null,
+	password_ text null,
 	passwordEncrypted bit,
 	passwordExpirationDate datetime null,
 	passwordReset bit,
@@ -2851,13 +2851,14 @@ BEGIN
 fetch next from cur_Inserted into @newFolder,@newHost
 END;
 
-CREATE PROCEDURE load_records_to_index(@server_id VARCHAR(100), @records_to_fetch INT)
+CREATE PROCEDURE load_records_to_index(@server_id VARCHAR(100), @records_to_fetch INT, @priority_level INT)
 AS
 BEGIN
 WITH cte AS (
   SELECT TOP(@records_to_fetch) *
   FROM dist_reindex_journal WITH (ROWLOCK, READPAST, UPDLOCK)
   WHERE serverid IS NULL
+  AND priority <= @priority_level
   ORDER BY priority ASC)
 UPDATE cte
   SET serverid=@server_id
@@ -3420,6 +3421,7 @@ create table publishing_pushed_assets(
 
 CREATE INDEX idx_pushed_assets_1 ON publishing_pushed_assets (bundle_id);
 CREATE INDEX idx_pushed_assets_2 ON publishing_pushed_assets (environment_id);
+CREATE INDEX idx_pushed_assets_3 ON publishing_pushed_assets (asset_id, environment_id);
 
 alter table publishing_bundle add force_push tinyint ;
 
@@ -3460,7 +3462,7 @@ create table folders_ir(folder varchar(255), local_inode varchar(36), remote_ino
 create table structures_ir(velocity_name varchar(255), local_inode varchar(36), remote_inode varchar(36), endpoint_id varchar(36), PRIMARY KEY (local_inode, endpoint_id));
 create table schemes_ir(name varchar(255), local_inode varchar(36), remote_inode varchar(36), endpoint_id varchar(36), PRIMARY KEY (local_inode, endpoint_id));
 create table htmlpages_ir(html_page varchar(255), local_working_inode varchar(36), local_live_inode varchar(36), remote_working_inode varchar(36), remote_live_inode varchar(36),local_identifier varchar(36), remote_identifier varchar(36), endpoint_id varchar(36), language_id bigint, PRIMARY KEY (local_working_inode, language_id, endpoint_id));
-
+create table fileassets_ir(file_name varchar(255), local_working_inode varchar(36), local_live_inode varchar(36), remote_working_inode varchar(36), remote_live_inode varchar(36),local_identifier varchar(36), remote_identifier varchar(36), endpoint_id varchar(36), language_id bigint, PRIMARY KEY (local_working_inode, language_id, endpoint_id));
 
 ---Server Action
 create table cluster_server_action(
@@ -3475,3 +3477,25 @@ create table cluster_server_action(
 	time_out_seconds bigint not null,
 	PRIMARY KEY (server_action_id)
 );
+
+-- Rules Engine
+create table dot_rule(id varchar(36) primary key,name varchar(255) not null,fire_on varchar(20),short_circuit tinyint default 0,host varchar(36) not null,folder varchar(36) not null,priority int default 0,enabled tinyint default 0,mod_date datetime,unique (name, host));
+create table rule_condition_group(id varchar(36) primary key,rule_id varchar(36) references dot_rule(id),operator varchar(10) not null,priority int default 0,mod_date datetime);
+create table rule_condition(id varchar(36) primary key,name varchar(255) not null,conditionlet text not null,condition_group varchar(36) references rule_condition_group(id),comparison varchar(36) not null,operator varchar(10) not null,priority int default 0,mod_date datetime);
+create table rule_condition_value (id varchar(36) primary key,condition_id varchar(36) references rule_condition(id), paramkey varchar(255) not null, value text,priority int default 0);
+create table rule_action (id varchar(36) primary key,name varchar(255) not null,rule_id varchar(36) references dot_rule(id),priority int default 0,actionlet text not null,mod_date datetime);
+create table rule_action_pars(id varchar(36) primary key,rule_action_id varchar(36) references rule_action(id), paramkey varchar(255) not null,value text);
+create index idx_rules_fire_on on dot_rule (fire_on);
+
+CREATE TABLE analytic_summary_user_visits (
+    user_id VARCHAR(255) NOT NULL,
+    host_id VARCHAR(36) NOT NULL,
+    visits NUMERIC(19,0) NOT NULL,
+    last_start_date DATETIME NOT NULL,
+    PRIMARY KEY (user_id, host_id),
+    UNIQUE (user_id, host_id)
+);
+
+CREATE INDEX idx_analytic_summary_user_visits_1 ON analytic_summary_user_visits (user_id);
+CREATE INDEX idx_analytic_summary_user_visits_2 ON analytic_summary_user_visits (host_id);
+CREATE INDEX idx_analytic_summary_user_visits_3 ON analytic_summary_user_visits (last_start_date);

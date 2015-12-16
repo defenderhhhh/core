@@ -29,9 +29,12 @@ import java.util.Locale;
 
 import javax.mail.internet.InternetAddress;
 
+import com.dotcms.enterprise.PasswordFactoryProxy;
+import com.dotcms.enterprise.de.qaware.heimdall.PasswordException;
 import com.dotcms.repackage.com.liferay.counter.ejb.CounterManagerUtil;
 import com.dotcms.repackage.com.liferay.mail.ejb.MailManagerUtil;
-import com.dotcms.repackage.org.owasp.esapi.ESAPI;
+import com.dotmarketing.util.Logger;
+import com.dotmarketing.util.RegEX;
 import com.liferay.portal.DuplicateUserEmailAddressException;
 import com.liferay.portal.DuplicateUserIdException;
 import com.liferay.portal.NoSuchUserException;
@@ -52,15 +55,14 @@ import com.liferay.portal.language.LanguageUtil;
 import com.liferay.portal.model.Company;
 import com.liferay.portal.model.User;
 import com.liferay.portal.pwd.PwdToolkitUtil;
-import com.liferay.portal.util.PortalInstances;
 import com.liferay.portal.util.PropsUtil;
 import com.liferay.portlet.admin.ejb.AdminConfigManagerUtil;
 import com.liferay.portlet.admin.model.EmailConfig;
 import com.liferay.portlet.admin.model.UserConfig;
-import com.liferay.util.Encryptor;
 import com.liferay.util.GetterUtil;
 import com.liferay.util.InstancePool;
 import com.liferay.util.StringUtil;
+import com.liferay.util.SystemProperties;
 import com.liferay.util.Time;
 import com.liferay.util.Validator;
 import com.liferay.util.mail.MailMessage;
@@ -76,6 +78,8 @@ import com.liferay.util.mail.MailMessage;
 
 public class UserLocalManagerImpl implements UserLocalManager {
 
+	private final String USERNAME_REGEXP_PATTERN = GetterUtil.getString( SystemProperties.get( "UserName.regexp.pattern" ) );
+	
 	// Business methods
 
 	public User addUser(
@@ -126,8 +130,16 @@ public class UserLocalManagerImpl implements UserLocalManager {
 
 		user.setCompanyId(companyId);
 		user.setCreateDate(new Date());
-		user.setPassword(Encryptor.digest(password1));
-		user.setPasswordEncrypted(true);
+
+        // Use new password hash method
+        try {
+            user.setPassword(PasswordFactoryProxy.generateHash(password1));
+        } catch (PasswordException e) {
+            Logger.error(UserLocalManagerImpl.class,
+                        "An error occurred generating the hashed password for userId: " + userId, e);
+            throw new SystemException("An error occurred generating the hashed password.");
+        }
+
 		user.setPasswordExpirationDate(expirationDate);
 		user.setPasswordReset(passwordReset);
 		user.setFirstName(firstName);
@@ -380,11 +392,14 @@ public class UserLocalManagerImpl implements UserLocalManager {
 		User user = UserUtil.findByPrimaryKey(userId);
 
 		String oldEncPwd = user.getPassword();
-		if (!user.isPasswordEncrypted()) {
-			oldEncPwd = Encryptor.digest(user.getPassword());
-		}
-
-		String newEncPwd = Encryptor.digest(password1);
+		// Use new password hash method
+        try {
+            user.setPassword(PasswordFactoryProxy.generateHash(password1));
+        } catch (PasswordException e) {
+            Logger.error(UserLocalManagerImpl.class,
+                    "An error occurred generating the hashed password for userId: " + userId, e);
+            throw new SystemException("An error occurred generating the hashed password.");
+        }
 
 		int passwordsLifespan = GetterUtil.getInteger(
 			PropsUtil.get(PropsUtil.PASSWORDS_LIFESPAN));
@@ -395,12 +410,6 @@ public class UserLocalManagerImpl implements UserLocalManager {
 				System.currentTimeMillis() + Time.DAY * passwordsLifespan);
 		}
 
-		/*if (user.hasCompanyMx()) {
-			MailManagerUtil.updatePassword(userId, password1);
-		}*/
-
-		user.setPassword(newEncPwd);
-		user.setPasswordEncrypted(true);
 		user.setPasswordExpirationDate(expirationDate);
 		user.setPasswordReset(passwordReset);
 
@@ -623,10 +632,11 @@ public class UserLocalManagerImpl implements UserLocalManager {
 			String userId, String firstName, String lastName,
 			String emailAddress, String smsId)
 		throws PortalException, SystemException {
-		if (Validator.isNull(firstName) || !ESAPI.validator().isValidInput("firstName", firstName, "UserName", 50, false)) {
+		if (Validator.isNull(firstName) || !RegEX.contains( firstName, USERNAME_REGEXP_PATTERN ) || firstName.length()>50) {
 			throw new UserFirstNameException();
+		    
 		}
-		else if (Validator.isNull(lastName) || !ESAPI.validator().isValidInput("lastName", lastName, "UserName", 50, false)) {
+		else if (Validator.isNull(lastName) || !RegEX.contains( lastName, USERNAME_REGEXP_PATTERN ) || lastName.length()>50) {
 			throw new UserLastNameException();
 		}
 
@@ -658,9 +668,8 @@ public class UserLocalManagerImpl implements UserLocalManager {
 
 		if (Validator.isNotNull(smsId) && !Validator.isEmailAddress(smsId)) {
 			throw new UserSmsException();
-		}
+		}	
 	}
-
 
 
 }

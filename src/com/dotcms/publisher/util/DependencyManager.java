@@ -15,13 +15,12 @@ import com.dotmarketing.beans.ContainerStructure;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.beans.MultiTree;
-import com.dotmarketing.beans.WebAsset;
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.DotIdentifierStateException;
 import com.dotmarketing.business.DotStateException;
 import com.dotmarketing.business.IdentifierAPI;
 import com.dotmarketing.cache.FieldsCache;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotSecurityException;
 import com.dotmarketing.factories.MultiTreeFactory;
@@ -32,6 +31,7 @@ import com.dotmarketing.portlets.folders.business.FolderAPI;
 import com.dotmarketing.portlets.folders.model.Folder;
 import com.dotmarketing.portlets.htmlpageasset.model.IHTMLPage;
 import com.dotmarketing.portlets.htmlpages.model.HTMLPage;
+import com.dotmarketing.portlets.languagesmanager.model.Language;
 import com.dotmarketing.portlets.links.model.Link;
 import com.dotmarketing.portlets.structure.factories.RelationshipFactory;
 import com.dotmarketing.portlets.structure.factories.StructureFactory;
@@ -143,7 +143,7 @@ public class DependencyManager {
 
 			} else if(asset.getType().equals("structure")) {
 				try {
-					Structure st = StructureCache.getStructureByInode(asset.getAsset());
+					Structure st = CacheLocator.getContentTypeCache().getStructureByInode(asset.getAsset());
 					
 					if(st == null) {
 						Logger.warn(getClass(), "Structure id: "+ (asset.getAsset() != null ? asset.getAsset() : "N/A") +" does NOT have working or live version, not Pushed");
@@ -244,6 +244,17 @@ public class DependencyManager {
 					Logger.warn(getClass(), "WorkflowScheme id: "+ (asset.getAsset() != null ? asset.getAsset() : "N/A") +" does NOT have working or live version, not Pushed");
 				} else {
 					workflows.add(asset.getAsset(),scheme.getModDate());
+				}
+			} else if (asset.getType().equals(Language.ASSET_TYPE)) {
+				Language language = APILocator.getLanguageAPI()
+						.getLanguage(asset.getAsset());
+				if (language == null || !UtilMethods.isSet(language.getLanguage())) {
+					Logger.warn(getClass(), "Language id: "
+							+ (asset.getAsset() != null ? asset.getAsset()
+									: "N/A")
+							+ " is not present in the database, not Pushed");
+				} else {
+					languages.add(asset.getAsset());
 				}
 			}
 		}
@@ -477,7 +488,7 @@ public class DependencyManager {
 
             //Add the default structure of this folder
             if ( f.getDefaultFileType() != null ) {
-                Structure defaultStructure = StructureCache.getStructureByInode( f.getDefaultFileType() );
+                Structure defaultStructure = CacheLocator.getContentTypeCache().getStructureByInode( f.getDefaultFileType() );
                 if ( (defaultStructure != null && InodeUtils.isSet( defaultStructure.getInode() ))
                         && !structuresSet.contains( defaultStructure.getInode() ) ) {
                     structures.addOrClean( defaultStructure.getInode(), defaultStructure.getModDate() );
@@ -512,21 +523,48 @@ public class DependencyManager {
 	private void setHTMLPagesDependencies() {
 		try {
 
+			Set<String> idsToWork = new HashSet<>();
+			idsToWork.addAll(htmlPagesSet);
+			for (String contId : contentsSet) {
+
+				List<Contentlet> c = APILocator.getContentletAPI().search("+identifier:" + contId, 0, 0, "moddate", user, false);
+
+				if (c != null && !c.isEmpty() && c.get(0).getStructure().getStructureType() == Structure.STRUCTURE_TYPE_HTMLPAGE) {
+					idsToWork.add(contId);
+				}
+			}
+
+			//Process the pages we found
+			setHTMLPagesDependencies(idsToWork);
+
+		} catch (DotSecurityException e) {
+			Logger.error(this, e.getMessage(), e);
+		} catch (DotDataException e) {
+			Logger.error(this, e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * For given HTMLPages adds its dependencies:
+	 * <ul>
+	 * <li>Hosts</li>
+	 * <li>Folders</li>
+	 * <li>Templates</li>
+	 * <li>Containers</li>
+	 * <li>Structures</li>
+	 * <li>Contentlet</li>
+	 * </ul>
+	 *
+	 * @param idsToWork List of pages to process
+	 */
+	private void setHTMLPagesDependencies(Set<String> idsToWork) {
+
+		try {
+
 			IdentifierAPI idenAPI = APILocator.getIdentifierAPI();
 			FolderAPI folderAPI = APILocator.getFolderAPI();
 			List<Container> containerList = new ArrayList<Container>();
 
-			List<String> idsToWork=new ArrayList<String>();
-			idsToWork.addAll(htmlPagesSet);
-			for( String contId : contentsSet) {
-				
-				List<Contentlet> c = APILocator.getContentletAPI().search("+identifier:"+contId, 0, 0, "moddate", user, false);
-				
-			    if(c!=null && !c.isEmpty() && c.get(0).getStructure().getStructureType()==Structure.STRUCTURE_TYPE_HTMLPAGE) {
-			        idsToWork.add(contId);
-			    }
-			}
-			
 			for (String pageId : idsToWork) {
 				Identifier iden = idenAPI.find(pageId);
 
@@ -617,7 +655,7 @@ public class DependencyManager {
 					List<ContainerStructure> csList = APILocator.getContainerAPI().getContainerStructures(container);
 
 					for (ContainerStructure containerStructure : csList) {
-						Structure st = StructureCache.getStructureByInode(containerStructure.getStructureId());
+						Structure st = CacheLocator.getContentTypeCache().getStructureByInode(containerStructure.getStructureId());
 						structures.addOrClean(containerStructure.getStructureId(), st.getModDate());
 						structuresSet.add(containerStructure.getStructureId());
 					}
@@ -741,7 +779,7 @@ public class DependencyManager {
 					List<ContainerStructure> csList = APILocator.getContainerAPI().getContainerStructures(container);
 
 					for (ContainerStructure containerStructure : csList) {
-						Structure st = StructureCache.getStructureByInode(containerStructure.getStructureId());
+						Structure st = CacheLocator.getContentTypeCache().getStructureByInode(containerStructure.getStructureId());
 						structures.addOrClean(containerStructure.getStructureId(), st.getModDate());
 						structuresSet.add(containerStructure.getStructureId());
 					}
@@ -783,7 +821,7 @@ public class DependencyManager {
 
 
 	private void structureDependencyHelper(String stInode) throws DotDataException, DotSecurityException{
-		Structure st = StructureCache.getStructureByInode(stInode);
+		Structure st = CacheLocator.getContentTypeCache().getStructureByInode(stInode);
 		Host h = APILocator.getHostAPI().find(st.getHost(), user, false);
 		hosts.addOrClean(st.getHost(), h.getModDate()); // add the host dependency
 
@@ -804,7 +842,7 @@ public class DependencyManager {
 			relationships.addOrClean( r.getInode(), r.getModDate());
 
 			if(!structures.contains(r.getChildStructureInode()) && config.getOperation().equals( Operation.PUBLISH) ){
-				Structure struct = StructureCache.getStructureByInode(r.getChildStructureInode());
+				Structure struct = CacheLocator.getContentTypeCache().getStructureByInode(r.getChildStructureInode());
 				solvedStructures.add(stInode);
 				structures.addOrClean( r.getChildStructureInode(), struct.getModDate());
 
@@ -812,7 +850,7 @@ public class DependencyManager {
 				    structureDependencyHelper( r.getChildStructureInode() );
 			}
 			if(!structures.contains(r.getParentStructureInode()) && config.getOperation().equals( Operation.PUBLISH) ){
-				Structure struct = StructureCache.getStructureByInode(r.getParentStructureInode());
+				Structure struct = CacheLocator.getContentTypeCache().getStructureByInode(r.getParentStructureInode());
 				solvedStructures.add(stInode);
 				structures.addOrClean( r.getParentStructureInode(), struct.getModDate());
 
@@ -893,7 +931,9 @@ public class DependencyManager {
         	languages.addOrClean(Long.toString(con.getLanguageId()), new Date()); // will be included only when hasn't been sent ever
 
 			try {
-				if(Config.getBooleanProperty("PUSH_PUBLISHING_PUSH_ALL_FOLDER_PAGES",false)) {
+				if (Config.getBooleanProperty("PUSH_PUBLISHING_PUSH_ALL_FOLDER_PAGES", false)
+						&& con.getStructure().getStructureType() == Structure.STRUCTURE_TYPE_HTMLPAGE) {
+
 					Folder contFolder=APILocator.getFolderAPI().find(con.getFolder(), user, false);
 				    List<IHTMLPage> folderHtmlPages = new ArrayList<IHTMLPage>(); 
 					folderHtmlPages.addAll(APILocator.getHTMLPageAPI().findLiveHTMLPages(
@@ -902,47 +942,32 @@ public class DependencyManager {
 							APILocator.getFolderAPI().find(con.getFolder(), user, false)));
 					folderHtmlPages.addAll(APILocator.getHTMLPageAssetAPI().getHTMLPages(contFolder, false, false, user, false));
 					folderHtmlPages.addAll(APILocator.getHTMLPageAssetAPI().getHTMLPages(contFolder, true, false, user, false));
-					
-					for(IHTMLPage htmlPage: folderHtmlPages) {
-                    	 
-					    if(htmlPage instanceof HTMLPage) {
-					        htmlPages.addOrClean( htmlPage.getIdentifier(), htmlPage.getModDate());
-					    }
-					    else {
-					        contents.addOrClean( htmlPage.getIdentifier(), htmlPage.getModDate());
-					    }
 
-						// working template working page
-						Template workingTemplateWP = APILocator.getTemplateAPI().findWorkingTemplate(htmlPage.getTemplateId(), user, false);
-						// live template working page
-						Template liveTemplateWP = APILocator.getTemplateAPI().findLiveTemplate(htmlPage.getTemplateId(), user, false);
+					Set<String> pagesToProcess = new HashSet<>();
+					for (IHTMLPage htmlPage : folderHtmlPages) {
 
-						// Templates dependencies
-                        templates.addOrClean( htmlPage.getTemplateId(), workingTemplateWP.getModDate());
+						Boolean mustBeIncluded;
 
-						// Containers dependencies
-						List<Container> containerList = new ArrayList<Container>();
-						containerList.addAll(APILocator.getTemplateAPI().getContainersInTemplate(workingTemplateWP, user, false));
-						containerList.addAll(APILocator.getTemplateAPI().getContainersInTemplate(liveTemplateWP, user, false));
-
-						for (Container container : containerList) {
-                        	containers.addOrClean( container.getIdentifier(), container.getModDate());
-							// Structure dependencies
-							List<ContainerStructure> csList = APILocator.getContainerAPI().getContainerStructures(container);
-
-							for (ContainerStructure containerStructure : csList) {
-								Structure struct = StructureCache.getStructureByInode(containerStructure.getStructureId());
-								structures.addOrClean(containerStructure.getStructureId(), struct.getModDate());
-							}
+						if (htmlPage instanceof HTMLPage) {
+							mustBeIncluded = htmlPages.addOrClean(htmlPage.getIdentifier(), htmlPage.getModDate());
+						} else {
+							mustBeIncluded = contents.addOrClean(htmlPage.getIdentifier(), htmlPage.getModDate());
 						}
+
+						if (mustBeIncluded) {
+							pagesToProcess.add(htmlPage.getIdentifier());
+						}
+
 					}
+					//Process the pages we found
+					setHTMLPagesDependencies(pagesToProcess);
 				}
 			} catch (Exception e) {
 				Logger.debug(this, e.toString());
 			}
 
 			if(Config.getBooleanProperty("PUSH_PUBLISHING_PUSH_STRUCTURES", true)) {
-				Structure struct = StructureCache.getStructureByInode(con.getStructureInode());
+				Structure struct = CacheLocator.getContentTypeCache().getStructureByInode(con.getStructureInode());
             	structures.addOrClean( con.getStructureInode(), struct.getModDate());
             	structureDependencyHelper(con.getStructureInode());
             }
@@ -959,7 +984,6 @@ public class DependencyManager {
 	 * <li>Relationships</li>
 	 * </ul>
 	 *
-	 * @param luceneQueries Queries to get the dependency Contentlets from
 	 * @throws DotBundleException If fails executing the Lucene queries
 	 */
 	private void setContentDependencies() throws DotBundleException {

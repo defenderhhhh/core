@@ -10,9 +10,9 @@
 <%@page import="com.dotcms.content.elasticsearch.business.ContentletIndexAPI"%>
 <%@page import="com.dotmarketing.util.Logger"%>
 <%@page import="com.dotmarketing.exception.DotSecurityException"%>
-<%@page import="com.dotcms.repackage.org.elasticsearch.action.admin.cluster.health.ClusterIndexHealth"%>
+<%@page import="org.elasticsearch.action.admin.cluster.health.ClusterIndexHealth"%>
 <%@page import="com.dotcms.content.elasticsearch.util.ESClient"%>
-<%@page import="com.dotcms.repackage.org.elasticsearch.action.admin.indices.status.IndexStatus"%>
+<%@page import="org.elasticsearch.action.admin.indices.status.IndexStatus"%>
 <%@page import="com.dotcms.content.elasticsearch.util.ESUtils"%>
 <%@page import="com.dotmarketing.business.APILocator"%>
 <%@page import="com.dotmarketing.portlets.contentlet.business.ContentletAPI"%>
@@ -24,7 +24,6 @@
 <%@page import="com.dotcms.repackage.org.jboss.cache.Cache"%>
 <%@page import="java.util.ArrayList"%>
 <%@page import="com.dotmarketing.business.CacheLocator"%>
-<%@page import="com.dotmarketing.business.DotJBCacheAdministratorImpl"%>
 <%@page import="java.util.Map"%>
 <%@ include file="/html/common/init.jsp"%>
 <%@page import="java.util.List"%>

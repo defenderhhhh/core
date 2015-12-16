@@ -9,7 +9,7 @@ import java.util.*;
 
 import com.dotcms.content.business.DotMappingException;
 import com.dotcms.content.elasticsearch.business.ESSearchResults;
-import com.dotcms.repackage.org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.search.SearchResponse;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.beans.Permission;
@@ -458,7 +458,7 @@ public class ContentletAPIInterceptor implements ContentletAPI, Interceptor {
 	/* (non-Javadoc)
 	 * @see com.dotmarketing.portlets.contentlet.business.ContentletAPI#delete(com.dotmarketing.portlets.contentlet.model.Contentlet, com.liferay.portal.model.User, boolean)
 	 */
-	public void delete(Contentlet contentlet, User user, boolean respectFrontendRoles) throws DotDataException,	DotSecurityException, DotContentletStateException {
+	public boolean delete(Contentlet contentlet, User user, boolean respectFrontendRoles) throws DotDataException,	DotSecurityException, DotContentletStateException {
 		for(ContentletAPIPreHook pre : preHooks){
 			boolean preResult = pre.delete(contentlet, user, respectFrontendRoles);
 			if(!preResult){
@@ -466,10 +466,12 @@ public class ContentletAPIInterceptor implements ContentletAPI, Interceptor {
 				throw new DotRuntimeException("The following prehook failed " + pre.getClass().getName());
 			}
 		}
-		conAPI.delete(contentlet, user, respectFrontendRoles);
+		boolean noErrors = conAPI.delete(contentlet, user, respectFrontendRoles);
 		for(ContentletAPIPostHook post : postHooks){
 			post.delete(contentlet, user, respectFrontendRoles);
 		}
+
+		return noErrors;
 	}
 
 	/* (non-Javadoc)
@@ -489,22 +491,49 @@ public class ContentletAPIInterceptor implements ContentletAPI, Interceptor {
 		}
 	}
 
+    /*
+     * (non-Javadoc)
+     * 
+     * @see
+     * com.dotmarketing.portlets.contentlet.business.ContentletAPI#deleteByHost
+     * (com.dotmarketing.beans.Host, com.liferay.portal.model.User, boolean)
+     */
+    public boolean deleteByHost(Host host, User user, boolean respectFrontendRoles)
+            throws DotDataException, DotSecurityException, DotContentletStateException {
+        for (ContentletAPIPreHook pre : preHooks) {
+            boolean preResult = pre.deleteByHost(host, user, respectFrontendRoles);
+            if (!preResult) {
+                Logger.error(this, "The following prehook failed " + pre.getClass().getName());
+                throw new DotRuntimeException("The following prehook failed "
+                        + pre.getClass().getName());
+            }
+        }
+        boolean noErrors = conAPI.deleteByHost(host, user, respectFrontendRoles);
+        for (ContentletAPIPostHook post : postHooks) {
+            post.deleteByHost(host, user, respectFrontendRoles);
+        }
+
+        return noErrors;
+    }
+
 	/* (non-Javadoc)
-	 * @see com.dotmarketing.portlets.contentlet.business.ContentletAPI#delete(java.util.List, com.liferay.portal.model.User, boolean)
-	 */
-	public void delete(List<Contentlet> contentlets, User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException, DotContentletStateException {
-		for(ContentletAPIPreHook pre : preHooks){
-			boolean preResult = pre.delete(contentlets, user, respectFrontendRoles);
-			if(!preResult){
-				Logger.error(this, "The following prehook failed " + pre.getClass().getName());
-				throw new DotRuntimeException("The following prehook failed " + pre.getClass().getName());
-			}
-		}
-		conAPI.delete(contentlets, user, respectFrontendRoles);
-		for(ContentletAPIPostHook post : postHooks){
-			post.delete(contentlets, user, respectFrontendRoles);
-		}
-	}
+     * @see com.dotmarketing.portlets.contentlet.business.ContentletAPI#delete(java.util.List, com.liferay.portal.model.User, boolean)
+     */
+    public boolean delete(List<Contentlet> contentlets, User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException, DotContentletStateException {
+        for(ContentletAPIPreHook pre : preHooks){
+            boolean preResult = pre.delete(contentlets, user, respectFrontendRoles);
+            if(!preResult){
+                Logger.error(this, "The following prehook failed " + pre.getClass().getName());
+                throw new DotRuntimeException("The following prehook failed " + pre.getClass().getName());
+            }
+        }
+        boolean noErrors = conAPI.delete(contentlets, user, respectFrontendRoles);
+        for(ContentletAPIPostHook post : postHooks){
+            post.delete(contentlets, user, respectFrontendRoles);
+        }
+
+        return noErrors;
+    }
 
 	/* (non-Javadoc)
 	 * @see com.dotmarketing.portlets.contentlet.business.ContentletAPI#delete(java.util.List, com.liferay.portal.model.User, boolean, boolean)
@@ -821,6 +850,29 @@ public class ContentletAPIInterceptor implements ContentletAPI, Interceptor {
 		}
 		return c;
 	}
+
+    public List<Contentlet> findContentletsByHost(Host parentHost,
+            List<Integer> includingContentTypes, List<Integer> excludingContentTypes, User user,
+            boolean respectFrontendRoles) throws DotDataException, DotSecurityException {
+        for (ContentletAPIPreHook pre : preHooks) {
+            boolean preResult = pre.findContentletsByHost(parentHost, includingContentTypes,
+                    excludingContentTypes, user, respectFrontendRoles);
+            if (!preResult) {
+                Logger.error(this, "The following prehook failed " + pre.getClass().getName());
+                throw new DotRuntimeException("The following prehook failed "
+                        + pre.getClass().getName());
+            }
+        }
+
+        List<Contentlet> c = conAPI.findContentletsByHost(parentHost, includingContentTypes,
+                excludingContentTypes, user, respectFrontendRoles);
+
+        for (ContentletAPIPostHook post : postHooks) {
+            post.findContentletsByHost(parentHost, includingContentTypes,
+                    excludingContentTypes, user, respectFrontendRoles);
+        }
+        return c;
+    }
 
 	/* (non-Javadoc)
 	 * @see com.dotmarketing.portlets.contentlet.business.ContentletAPI#findContentletsByIdentifiers(java.lang.String[], boolean, long, com.liferay.portal.model.User, boolean)
@@ -2123,6 +2175,21 @@ public class ContentletAPIInterceptor implements ContentletAPI, Interceptor {
 		conAPI.refreshContentUnderFolder(folder);
 		for(ContentletAPIPostHook post : postHooks){
 			post.refreshContentUnderFolder(folder);
+		}
+	}
+
+	public void refreshContentUnderFolderPath ( String hostId, String folderPath ) throws DotReindexStateException {
+
+		for ( ContentletAPIPreHook pre : preHooks ) {
+			boolean preResult = pre.refreshContentUnderFolderPath(hostId, folderPath);
+			if ( !preResult ) {
+				Logger.error(this, "The following prehook failed " + pre.getClass().getName());
+				throw new DotRuntimeException("The following prehook failed " + pre.getClass().getName());
+			}
+		}
+		conAPI.refreshContentUnderFolderPath(hostId, folderPath);
+		for ( ContentletAPIPostHook post : postHooks ) {
+			post.refreshContentUnderFolderPath(hostId, folderPath);
 		}
 	}
 

@@ -835,7 +835,7 @@ create table User_ (
 	userId varchar2(100) not null primary key,
 	companyId varchar2(100) not null,
 	createDate date null,
-	password_ varchar2(100) null,
+	password_ nclob null,
 	passwordEncrypted number(1, 0),
 	passwordExpirationDate date null,
 	passwordReset number(1, 0),
@@ -2714,14 +2714,14 @@ CREATE OR REPLACE TYPE reindex_record AS OBJECT (
 /
 CREATE OR REPLACE TYPE reindex_record_list IS TABLE OF reindex_record;
 /
-CREATE OR REPLACE FUNCTION load_records_to_index(server_id VARCHAR2, records_to_fetch NUMBER)
+CREATE OR REPLACE FUNCTION load_records_to_index(server_id VARCHAR2, records_to_fetch NUMBER, priority_level NUMBER)
    RETURN types.ref_cursor IS
  cursor_ret types.ref_cursor;
  data_ret reindex_record_list;
 BEGIN
   data_ret := reindex_record_list();
   FOR dj in (SELECT * FROM dist_reindex_journal
-         WHERE serverid IS NULL AND rownum<=records_to_fetch
+         WHERE serverid IS NULL AND priority <= priority_level AND rownum<=records_to_fetch
          ORDER BY priority ASC
          FOR UPDATE)
   LOOP
@@ -3382,6 +3382,7 @@ create table publishing_pushed_assets(
 
 CREATE INDEX idx_pushed_assets_1 ON publishing_pushed_assets (bundle_id);
 CREATE INDEX idx_pushed_assets_2 ON publishing_pushed_assets (environment_id);
+CREATE INDEX idx_pushed_assets_3 ON publishing_pushed_assets (asset_id, environment_id);
 
 alter table publishing_bundle add force_push number(1,0) ;
 
@@ -3420,7 +3421,7 @@ create table folders_ir(folder varchar2(255), local_inode varchar2(36), remote_i
 create table structures_ir(velocity_name varchar2(255), local_inode varchar2(36), remote_inode varchar2(36), endpoint_id varchar2(36), PRIMARY KEY (local_inode, endpoint_id));
 create table schemes_ir(name varchar2(255), local_inode varchar2(36), remote_inode varchar2(36), endpoint_id varchar2(36), PRIMARY KEY (local_inode, endpoint_id));
 create table htmlpages_ir(html_page varchar2(255), local_working_inode varchar2(36), local_live_inode varchar2(36), remote_working_inode varchar2(36), remote_live_inode varchar2(36),local_identifier varchar2(36), remote_identifier varchar2(36), endpoint_id varchar2(36), language_id number(19,0), PRIMARY KEY (local_working_inode, language_id, endpoint_id));
-
+create table fileassets_ir(file_name varchar2(255), local_working_inode varchar2(36), local_live_inode varchar2(36), remote_working_inode varchar2(36), remote_live_inode varchar2(36),local_identifier varchar2(36), remote_identifier varchar2(36), endpoint_id varchar2(36), language_id number(19,0), PRIMARY KEY (local_working_inode, language_id, endpoint_id));
 
 ---Server Action
 create table cluster_server_action(
@@ -3435,3 +3436,24 @@ create table cluster_server_action(
 	time_out_seconds number(13) not null,
 	PRIMARY KEY (server_action_id)
 );
+
+-- Rules Engine
+create table dot_rule(id varchar2(36),name varchar2(255) not null,fire_on varchar2(20),short_circuit  number(1,0) default 0,host varchar2(36) not null,folder varchar2(36) not null,priority number(10,0) default 0,enabled  number(1,0) default 0,mod_date timestamp,primary key (id),unique (name, host));
+create table rule_condition_group(id varchar2(36) primary key,rule_id varchar2(36) references dot_rule(id),operator varchar2(10) not null,priority number(10,0) default 0,mod_date timestamp);
+create table rule_condition(id varchar2(36) primary key,name varchar2(255) not null,conditionlet nclob not null,condition_group varchar(36) references rule_condition_group(id),comparison varchar2(36) not null,operator varchar2(10) not null,priority number(10,0) default 0,mod_date timestamp);
+create table rule_condition_value (id varchar2(36) primary key,condition_id varchar2(36) references rule_condition(id), paramkey varchar2(255) not null, value nclob,priority number(10,0) default 0);
+create table rule_action (id varchar2(36) primary key,name varchar2(255) not null,rule_id varchar2(36) references dot_rule(id),priority number(10,0) default 0,actionlet nclob not null,mod_date timestamp);
+create table rule_action_pars(id varchar2(36) primary key,rule_action_id varchar2(36) references rule_action(id), paramkey varchar2(255) not null,value nclob);
+create index idx_rules_fire_on on dot_rule (fire_on);
+
+CREATE TABLE analytic_summary_user_visits (
+    user_id VARCHAR2(255) NOT NULL,
+    host_id VARCHAR2(36) NOT NULL,
+    visits NUMBER(19,0) NOT NULL,
+    last_start_date TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, host_id)
+);
+
+CREATE INDEX idx_analytic_user_visits_1 ON analytic_summary_user_visits (user_id);
+CREATE INDEX idx_analytic_user_visits_2 ON analytic_summary_user_visits (host_id);
+CREATE INDEX idx_analytic_user_visits_3 ON analytic_summary_user_visits (last_start_date);

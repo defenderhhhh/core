@@ -8,8 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dotcms.repackage.com.fasterxml.jackson.databind.ObjectMapper;
 import com.dotcms.repackage.org.apache.commons.beanutils.BeanUtils;
-import com.dotcms.repackage.org.codehaus.jackson.map.ObjectMapper;
 import com.dotcms.enterprise.LicenseUtil;
 import com.dotmarketing.beans.Permission;
 import com.dotmarketing.business.APILocator;
@@ -83,7 +83,7 @@ public class WorkflowFactoryImpl implements WorkFlowFactory {
 
 		row.put("clazz", row.get("clazz"));
 
-		row.put("myOrder", row.get("my_order"));
+		row.put("order", row.get("my_order"));
 		row.put("actionId", row.get("action_id"));
 		BeanUtils.copyProperties(actionClass, row);
 		return actionClass;
@@ -97,8 +97,6 @@ public class WorkflowFactoryImpl implements WorkFlowFactory {
 	}
 
 	private List convertListToObjects(List<Map<String, Object>> rs, Class clazz) throws DotDataException {
-		final ObjectMapper m = new ObjectMapper();
-
 		final List ret = new ArrayList();
 		try {
 			for (final Map<String, Object> map : rs) {
@@ -654,9 +652,9 @@ public class WorkflowFactoryImpl implements WorkFlowFactory {
 		    final List<Role> userRoles = new ArrayList<Role>();
 		    if (UtilMethods.isSet(searcher.getAssignedTo())) {
 
-    			final Role r = new Role();
-    			r.setId(searcher.getAssignedTo());
-    			userRoles.add(r);
+		    	
+		    	final Role r = APILocator.getRoleAPI().loadRoleById(searcher.getAssignedTo());
+		    	if(r!=null)userRoles.add(r);
     		} else {
     			userRoles.addAll(APILocator.getRoleAPI().loadRolesForUser(searcher.getUser().getUserId(), false));
     			userRoles.add(APILocator.getRoleAPI().getUserRole(searcher.getUser()));
@@ -672,7 +670,9 @@ public class WorkflowFactoryImpl implements WorkFlowFactory {
     			rolesString += "'" + role.getId() + "'";
     		}
 
-    		query.append(" ( workflow_task.assigned_to in (" + rolesString + ")  ) and ");
+    		if(rolesString.length()>0){
+    			query.append(" ( workflow_task.assigned_to in (" + rolesString + ")  ) and ");
+    		}
 		}
 		query.append(" workflow_step.id = workflow_task.status and workflow_step.scheme_id = workflow_scheme.id and ");
 
@@ -713,7 +713,7 @@ public class WorkflowFactoryImpl implements WorkFlowFactory {
 				// condition.append(" status , ");
 			}
 			if (UtilMethods.isSet(searcher.getOrderBy())) {
-				orderby=searcher.getOrderBy();
+				orderby=searcher.getOrderBy().replaceAll("[^\\w_\\. ]", "");
 			} else {
 
 				orderby="mod_date desc";
@@ -1153,23 +1153,27 @@ public class WorkflowFactoryImpl implements WorkFlowFactory {
 
 		for (Map<String, Object> row : results) {
 			WorkflowTask wt = new WorkflowTask();
-			wt.setId(row.get("id").toString());
+			wt.setId(getStringValue(row, "id"));
 			wt.setCreationDate((Date)row.get("creation_date"));
 			wt.setModDate((Date)row.get("mod_date"));
 			wt.setDueDate((Date)row.get("due_date"));
-			wt.setCreatedBy(row.get("created_by").toString());
-			wt.setAssignedTo(row.get("assigned_to").toString());
-			wt.setBelongsTo(row.get("belongs_to")!=null?row.get("belongs_to").toString():"");
-			wt.setTitle(row.get("title").toString());
-			wt.setDescription(row.get("description")!=null?row.get("description").toString():"");
-			wt.setStatus(row.get("status").toString());
-			wt.setWebasset(row.get("webasset").toString());
+			wt.setCreatedBy(getStringValue(row, "created_by"));
+			wt.setAssignedTo(getStringValue(row, "assigned_to"));
+			wt.setBelongsTo(getStringValue(row, "belongs_to"));
+			wt.setTitle(getStringValue(row, "title"));
+			wt.setDescription(getStringValue(row, "description"));
+			wt.setStatus(getStringValue(row, "status"));
+			wt.setWebasset(getStringValue(row, "webasset"));
 			wfTasks.add(wt);
 		}
 
 		return wfTasks;
 	}
 
+	private String getStringValue(Map<String, Object> row, String key) {
+		Object value = row.get(key);
+		return (value == null) ? "" : value.toString();
+	}
 	// christian escalation
 	public List<WorkflowTask> searchAllTasks(WorkflowSearcher searcher) throws DotDataException {
 

@@ -156,6 +156,21 @@ public interface ContentletAPI {
 	public List<Contentlet> findContentletsByHost(Host parentHost, User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException;
 
 	/**
+	 * Gets a list of Contentlets from a given parent host, retrieves the working version of content. The difference between this method and the other one
+	 * is that the user can specify which content type want to include and exclude.
+	 * NOTE: If the parameters includingContentTypes and excludingContentTypes are empty if will return all the contentlets.
+	 * @param parentHost
+	 * @param includingContentTypes this is a list of content types that you would like to include in the results
+	 * @param excludingContentTypes this is a list of content types that you would like to exclude in the results
+	 * @param user
+	 * @param respectFrontendRoles
+	 * @return list of contentlets
+	 * @throws DotDataException
+	 * @throws DotSecurityException
+	 */
+	public List<Contentlet> findContentletsByHost(Host parentHost, List<Integer> includingContentTypes, List<Integer> excludingContentTypes, User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException;
+
+	/**
 	 * Copies a contentlet, including all its fields including binary files, image and file fields are pointers and the are preserved as the are
 	 * so if source contentlet points to image A and resulting new contentlet will point to same image A as well, also copies source permissions.
 	 * 
@@ -460,17 +475,16 @@ public interface ContentletAPI {
 	 */
 	public void archive(Contentlet contentlet, User user, boolean respectFrontendRoles) throws DotDataException,DotSecurityException, DotContentletStateException;
 
-	
-
 	/**
 	 * This method completely deletes the given contentlet from the system
 	 * @param contentlet
 	 * @param user
 	 * @param respectFrontendRoles
+	 * @returns true when no errors occurs otherwise false
 	 * @throws DotDataException
 	 * @throws DotSecurityException
 	 */
-	public void delete(Contentlet contentlet, User user, boolean respectFrontendRoles) throws DotDataException,DotSecurityException, DotContentletStateException;
+	public boolean delete(Contentlet contentlet, User user, boolean respectFrontendRoles) throws DotDataException,DotSecurityException, DotContentletStateException;
 	
 	
 	/**
@@ -579,12 +593,29 @@ public interface ContentletAPI {
 	 * @param contentlets
 	 * @param user
 	 * @param respectFrontendRoles
+	 * @returns true when no errors occurs otherwise false
 	 * @throws DotDataException
 	 * @throws DotSecurityException
 	 */
-	public void delete(List<Contentlet> contentlets, User user, boolean respectFrontendRoles) throws DotDataException,DotSecurityException, DotContentletStateException;
-	
-	
+	public boolean delete(List<Contentlet> contentlets, User user, boolean respectFrontendRoles) throws DotDataException,DotSecurityException, DotContentletStateException;
+
+    /**
+     * This method completely deletes all contentlets from the system for a the
+     * given host.
+     * <p>
+     * It gathers all the contentlets from the host and then proceed with the
+     * delete of each one
+     * </p>
+     * 
+     * @param host
+     * @param user
+     * @param respectFrontendRoles
+     * @returns true when no errors occurs otherwise false
+     * @throws DotDataException
+     * @throws DotSecurityException
+     */
+    public boolean deleteByHost(Host host, User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException;
+
 	/**
 	 * This method completely deletes the given contentlet from the system. It was added for the jira issue
 	 * http://jira.dotmarketing.net/browse/DOTCMS-2059
@@ -765,6 +796,15 @@ public interface ContentletAPI {
 	 * @throws DotReindexStateException
 	 */
 	public void refreshContentUnderFolder(Folder folder)throws DotReindexStateException;
+
+	/**
+	 * Reindexes content under a given folder path
+	 *
+	 * @param hostId
+	 * @param folderPath
+	 * @throws DotReindexStateException
+	 */
+	public void refreshContentUnderFolderPath ( String hostId, String folderPath ) throws DotReindexStateException;
 	
 	/**
 	 * Get all the files relates to the contentlet
@@ -1487,7 +1527,7 @@ public interface ContentletAPI {
 	 * @throws DotSecurityException
 	 * @throws DotDataException
 	 */
-	public com.dotcms.repackage.org.elasticsearch.action.search.SearchResponse esSearchRaw ( String esQuery, boolean live, User user, boolean respectFrontendRoles ) throws DotSecurityException, DotDataException;
+	public org.elasticsearch.action.search.SearchResponse esSearchRaw ( String esQuery, boolean live, User user, boolean respectFrontendRoles ) throws DotSecurityException, DotDataException;
 
 	/**
 	 * Executes a given Elastic Search query.

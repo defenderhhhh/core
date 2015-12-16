@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
 
-import com.dotcms.notifications.bean.Notification;
 import com.dotcms.notifications.bean.NotificationLevel;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.WebAsset;
@@ -20,7 +19,6 @@ import com.dotmarketing.business.Treeable;
 import com.dotmarketing.business.query.GenericQueryFactory.Query;
 import com.dotmarketing.business.query.SQLQueryFactory;
 import com.dotmarketing.cache.FieldsCache;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.cache.VirtualLinksCache;
 import com.dotmarketing.common.db.DotConnect;
 import com.dotmarketing.db.HibernateUtil;
@@ -86,7 +84,7 @@ public class HostAPIImpl implements HostAPI {
 		}
 
 		try {
-	    	Structure st = StructureCache.getStructureByVelocityVarName("Host");
+	    	Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 	    	List<Contentlet> list = null;
 	    	try{
 	    		list = APILocator.getContentletAPI().search("+structureInode:" + st.getInode() + " +working:true +host.isdefault:true ", 0, 0, null, APILocator.getUserAPI().getSystemUser(), respectFrontendRoles);
@@ -215,7 +213,7 @@ public class HostAPIImpl implements HostAPI {
 		}
 
 		try {
-			Structure st = StructureCache.getStructureByVelocityVarName("Host");
+			Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 			String query = "+structureInode:" + st.getInode() +
 					" +working:true +Host.hostName:" + hostName;
 
@@ -253,7 +251,7 @@ public class HostAPIImpl implements HostAPI {
 		Host host = null;
 
 		try {
-			Structure st = StructureCache.getStructureByVelocityVarName("Host");
+			Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 
 			List<Contentlet> list = APILocator.getContentletAPI().search("+structureInode:" + st.getInode() +
 					" +working:true +Host.aliases:" + alias, 0, 0, null, user, respectFrontendRoles);
@@ -301,7 +299,7 @@ public class HostAPIImpl implements HostAPI {
 		    if(vinfo!=null && UtilMethods.isSet(vinfo.getIdentifier())) {
 		        String hostInode=vinfo.getWorkingInode();
     			Contentlet cont= APILocator.getContentletAPI().find(hostInode, APILocator.getUserAPI().getSystemUser(), respectFrontendRoles);
-    			Structure st = StructureCache.getStructureByVelocityVarName("Host");
+    			Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
     			if(cont.getStructureInode().equals(st.getInode())) {
     			    host=new Host(cont);
     			    hostCache.add(host);
@@ -330,7 +328,7 @@ public class HostAPIImpl implements HostAPI {
 	 */
 	public List<Host> findAll(User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException {
 		try {
-			Structure st = StructureCache.getStructureByVelocityVarName("Host");
+			Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 			List<Contentlet> list = APILocator.getContentletAPI().search("+structureInode:" + st.getInode() + " +working:true", 0, 0, null, user, respectFrontendRoles);
 			return convertToHostList(list);
 		} catch (Exception e) {
@@ -375,24 +373,32 @@ public class HostAPIImpl implements HostAPI {
 			hostCache.remove(host);
 		}
 		Contentlet c;
-		ContentletAPI conAPI = APILocator.getContentletAPI();
 		try {
 			c = APILocator.getContentletAPI().checkout(host.getInode(), user, respectFrontendRoles);
 		} catch (DotContentletStateException e) {
-			Structure st = StructureCache.getStructureByVelocityVarName("Host");
+			Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 			c = new Contentlet();
 			c.setStructureInode(st.getInode());
 		}
 		APILocator.getContentletAPI().copyProperties(c, host.getMap());;
 		c.setInode("");
 		c = APILocator.getContentletAPI().checkin(c, user, respectFrontendRoles);
-		
+
 		if(host.isWorking() || host.isLive()){
 			APILocator.getVersionableAPI().setLive(c);
 		}
 		Host savedHost =  new Host(c);
 
-		if(host.isDefault()) {  // If host is marked as default make sure that no other host is already set to be the default
+		updateDefaultHost(host, user, respectFrontendRoles);
+		hostCache.clearAliasCache();
+		return savedHost;
+
+	}
+
+	public void updateDefaultHost(Host host, User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException{
+		// If host is marked as default make sure that no other host is already set to be the default
+		if(host.isDefault()) {
+			ContentletAPI conAPI = APILocator.getContentletAPI();
 			List<Host> hosts= findAllFromDB(user, respectFrontendRoles);
 			Host otherHost;
 			Contentlet otherHostContentlet;
@@ -400,6 +406,7 @@ public class HostAPIImpl implements HostAPI {
 				if(h.getIdentifier().equals(host.getIdentifier())){
 					continue;
 				}
+				// if this host is the default as well then ours should become the only one
 				if(h.isDefault()){
 					boolean isHostRunning = h.isLive();
 					otherHostContentlet = APILocator.getContentletAPI().checkout(h.getInode(), user, respectFrontendRoles);
@@ -416,19 +423,14 @@ public class HostAPIImpl implements HostAPI {
 						otherHost = new Host(cont);
 						publish(otherHost, user, respectFrontendRoles);
 					}
-					
 				}
 			}
 		}
-
-		hostCache.clearAliasCache();
-		return savedHost;
-
 	}
 
 	public List<Host> getHostsWithPermission(int permissionType, boolean includeArchived, User user, boolean respectFrontendRoles) throws DotDataException, DotSecurityException {
 		try {
-			Structure st = StructureCache.getStructureByVelocityVarName("Host");
+			Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 			List<Contentlet> list = APILocator.getContentletAPI().search("+structureInode:" + st.getInode() + " +working:true", 0, 0, null, user, respectFrontendRoles);
 			list = APILocator.getPermissionAPI().filterCollection(list, permissionType, respectFrontendRoles, user);
 			if (includeArchived) {
@@ -460,14 +462,19 @@ public class HostAPIImpl implements HostAPI {
 		}
 
 		try {
-			SQLQueryFactory factory = new SQLQueryFactory("SELECT * FROM Host WHERE isSystemHost = 1");
-			List<Map<String, Serializable>> hosts = factory.execute();
-			if(hosts.size() == 0) {
+		    String systemHostSql = "select id from identifier where id = ?";
+			DotConnect db  = new DotConnect();
+			db.setSQL(systemHostSql);
+			db.addParam(Host.SYSTEM_HOST);
+			List<Map<String, Object>> rs = db.loadObjectResults();
+			if(rs.isEmpty()) {
+			    // TODO: Be aware that this line may cause an infinite loop.
 				createSystemHost();
 			} else {
-				systemHost = new Host(conFac.find((String)hosts.get(0).get("inode")));
+			    final String systemHostId = (String) rs.get(0).get("id");
+			    this.systemHost =  APILocator.getHostAPI().DBSearch(systemHostId, user, respectFrontendRoles);
 			}
-			if(hosts.size() > 1){
+			if(rs.size() > 1){
 				Logger.fatal(this, "There is more than one working version of the system host!!");
 			}
 		} catch (Exception e) {
@@ -553,6 +560,15 @@ public class HostAPIImpl implements HostAPI {
 					throw new DotRuntimeException(e.getMessage(), e);
 				}
 			}
+			
+			/**
+			 * Gradually deletes a whole site (host) by removing each piece of
+			 * content in it (e.g., removes old files, HTML and Content pages,
+			 * links, contentlets, and so on).
+			 * 
+			 * @throws Exception
+			 *             An error occurred when executing a delete method.
+			 */
 			public void deleteHost() throws Exception {
 				if(host != null){
 					hostCache.remove(host);
@@ -582,9 +598,8 @@ public class HostAPIImpl implements HostAPI {
 				}
 
 				// Remove Contentlet
-				ContentletAPI contentAPI = APILocator.getContentletAPI();								
-				List<Contentlet> contentlets = contentAPI.findContentletsByHost(host, user, respectFrontendRoles);
-				contentAPI.delete(contentlets, user, respectFrontendRoles);
+				ContentletAPI contentAPI = APILocator.getContentletAPI();
+				contentAPI.deleteByHost(host, user, respectFrontendRoles);
 
 				// Remove Folders
 				FolderAPI folderAPI = APILocator.getFolderAPI();
@@ -646,6 +661,15 @@ public class HostAPIImpl implements HostAPI {
 	                }
 				}
 
+				// Double-check that ALL contentlets are effectively removed  
+				// before using dotConnect to kill bad identifiers
+				List<Contentlet> remainingContenlets = contentAPI
+						.findContentletsByHost(host, user, respectFrontendRoles);
+				if (remainingContenlets != null
+						&& remainingContenlets.size() > 0) {
+					contentAPI.deleteByHost(host, user, respectFrontendRoles);
+				}
+				
                 // kill bad identifiers pointing to the host
                 dc.setSQL("delete from identifier where host_inode=?");
                 dc.addParam(host.getIdentifier());
@@ -708,7 +732,7 @@ public class HostAPIImpl implements HostAPI {
 
 	private synchronized Host createDefaultHost() throws DotDataException,
 	DotSecurityException {
-    	Structure st = StructureCache.getStructureByVelocityVarName("Host");
+    	Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 		List<Field> fields = FieldsCache.getFieldsByStructureInode(st.getInode());
 		Field isDefault = null;
     	for(Field f : fields){
@@ -763,15 +787,19 @@ public class HostAPIImpl implements HostAPI {
 	private synchronized Host createSystemHost() throws DotDataException,
 	DotSecurityException {
 
-		SQLQueryFactory factory = new SQLQueryFactory("SELECT * FROM Host WHERE isSystemHost = 1");
-		List<Map<String, Serializable>> hosts = factory.execute();
 		User systemUser = APILocator.getUserAPI().getSystemUser();
-		if(hosts.size() == 0) {
+		String systemHostSql = "select id from identifier where id = ?";
+		DotConnect db  = new DotConnect();
+		db.setSQL(systemHostSql);
+		db.addParam(Host.SYSTEM_HOST);
+		List<Map<String, Object>> rs = db.loadObjectResults();
+		if(rs.isEmpty()) {
 			Host systemHost = new Host();
 			systemHost.setDefault(false);
 			systemHost.setHostname("system");
 			systemHost.setSystemHost(true);
 			systemHost.setHost(null);
+			systemHost.setLanguageId(APILocator.getLanguageAPI().getDefaultLanguage().getId());
 			systemHost = new Host(conFac.save(systemHost));
 			systemHost.setIdentifier(Host.SYSTEM_HOST);
 			systemHost.setModDate(new Date());
@@ -783,10 +811,12 @@ public class HostAPIImpl implements HostAPI {
 			APILocator.getVersionableAPI().setWorking(systemHost);
 			this.systemHost = systemHost;
 		} else {
-			this.systemHost = new Host(conFac.find((String)hosts.get(0).get("inode")));
+		    final String systemHostId = (String) rs.get(0).get("id");
+            this.systemHost =  APILocator.getHostAPI().DBSearch(systemHostId, systemUser, false);
 		}
 		return systemHost;
 	}
+	
 	private List<Host> convertToHostList(List<Contentlet> list) {
 		List<Host> hosts = new ArrayList<Host>();
 		for(Contentlet c : list) {
@@ -826,11 +856,13 @@ public class HostAPIImpl implements HostAPI {
 		if (!UtilMethods.isSet(id))
 			return null;
 
-		Structure st = StructureCache.getStructureByVelocityVarName("Host");
+		String languageIdColumn = "language_id";
+
+		Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 		List<Field> fields = FieldsCache.getFieldsByStructureInode(st.getInode());
 
 		StringBuilder sql = new StringBuilder();
-		sql.append("SELECT inode");
+		sql.append("SELECT inode," + languageIdColumn);
 		for (Field field: fields) {
 			if (APILocator.getFieldAPI().valueSettable(field) && !field.getFieldType().equals(Field.FieldType.BINARY.toString())) {
 				sql.append(", " + field.getVelocityVarName());
@@ -851,8 +883,13 @@ public class HostAPIImpl implements HostAPI {
 		Host host = new Host();
 
 		for (String key: list.get(0).keySet()) {
-			host.setProperty(key, list.get(0).get(key));
+			if ( key.equals(languageIdColumn) ) {
+				host.setProperty(Contentlet.LANGUAGEID_KEY, list.get(0).get(key));
+			} else {
+				host.setProperty(key, list.get(0).get(key));
+			}
 		}
+		host.setProperty(Contentlet.MOD_DATE_KEY, new Date());//We don't really need this value for the system host but to avoid problems casting that field....
 
 		return host;
 	}

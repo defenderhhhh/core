@@ -20,11 +20,8 @@ import com.liferay.util.FileUtil;
  */
 public class BinaryMap {
 
-	private String name;
-	private String size;
 	private String rawUri;
 	private String resizeUri;
-	private String thumbnailUri;
 	private Contentlet content;
 	private Field field;
 	private File file;
@@ -93,7 +90,9 @@ public class BinaryMap {
 	 */
 	public String getResizeUri() {
 	    if(getName().length()==0) return "";
-		resizeUri = "/contentAsset/image/"+content.getInode()+"/"+field.getVelocityVarName()+"/byInode/1/filter/Resize"; 
+
+	    final String imageId =  UtilMethods.isSet(content.getIdentifier()) ? content.getIdentifier() : content.getInode();
+		resizeUri = "/contentAsset/image/"+imageId+"/"+field.getVelocityVarName()+"/filter/Resize"; 
 		return resizeUri;
 	}
 	
@@ -123,7 +122,9 @@ public class BinaryMap {
 	 */
 	public String getThumbnailUri() {
 	    if(getName().length()==0) return "";
-        resizeUri = "/contentAsset/image/"+content.getInode()+"/"+field.getVelocityVarName()+"/byInode/1/filter/Thumbnail"; 
+	    
+	    final String imageId =  UtilMethods.isSet(content.getIdentifier()) ? content.getIdentifier() : content.getInode();
+        resizeUri = "/contentAsset/image/"+imageId+"/"+field.getVelocityVarName()+"/filter/Thumbnail"; 
         return resizeUri;
 	}
 

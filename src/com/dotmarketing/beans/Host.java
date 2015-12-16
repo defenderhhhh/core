@@ -5,10 +5,11 @@ import java.util.List;
 import java.util.Map;
 
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.PermissionAPI;
 import com.dotmarketing.business.PermissionSummary;
 import com.dotmarketing.business.Permissionable;
-import com.dotmarketing.cache.StructureCache;
+import com.dotmarketing.db.DbConnectionFactory;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotRuntimeException;
 import com.dotmarketing.portlets.contentlet.model.Contentlet;
@@ -30,7 +31,7 @@ public class Host extends Contentlet implements Permissionable {
 
 	public Host() {
 		map.put(SYSTEM_HOST_KEY, false);
-		Structure st = StructureCache.getStructureByVelocityVarName("Host");
+		Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 		this.map.put(STRUCTURE_INODE_KEY, st.getInode());
 		setDefault(false);
 		setSystemHost(false);
@@ -97,17 +98,20 @@ public class Host extends Contentlet implements Permissionable {
 	}
 
 	public String getStructureInode() {
-		Structure st = StructureCache.getStructureByVelocityVarName("Host");
+		Structure st = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("Host");
 		return (String) st.getInode();
 	}
 
 	public boolean isSystemHost() {
 		Object isSystemHost = map.get(SYSTEM_HOST_KEY);
 		if(isSystemHost!=null) {
-			return (Boolean) isSystemHost;
-		} else {
-			return false;
+			if (isSystemHost instanceof Boolean) {
+				return (Boolean) isSystemHost;
+			}
+			return Integer.parseInt(isSystemHost.toString()) == 1 ? true
+					: false;
 		}
+		return false;
 	}
 
 	public void setSystemHost(boolean isSystemHost) {

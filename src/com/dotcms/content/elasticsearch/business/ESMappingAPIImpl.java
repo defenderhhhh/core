@@ -20,22 +20,20 @@ import com.dotcms.content.business.ContentMappingAPI;
 import com.dotcms.content.business.DotMappingException;
 import com.dotcms.content.elasticsearch.util.ESClient;
 import com.dotcms.enterprise.LicenseUtil;
+import com.dotcms.repackage.com.fasterxml.jackson.databind.ObjectMapper;
 import com.dotcms.repackage.org.apache.commons.collections.CollectionUtils;
 import com.dotcms.repackage.org.apache.commons.lang.time.FastDateFormat;
-import com.dotcms.repackage.org.codehaus.jackson.JsonGenerationException;
-import com.dotcms.repackage.org.codehaus.jackson.map.JsonMappingException;
-import com.dotcms.repackage.org.codehaus.jackson.map.ObjectMapper;
-import com.dotcms.repackage.org.elasticsearch.ElasticsearchException;
-import com.dotcms.repackage.org.elasticsearch.action.ListenableActionFuture;
-import com.dotcms.repackage.org.elasticsearch.action.admin.cluster.state.ClusterStateRequest;
-import com.dotcms.repackage.org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
+import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.ListenableActionFuture;
+import org.elasticsearch.action.admin.cluster.state.ClusterStateRequest;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.beans.Permission;
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.DotStateException;
 import com.dotmarketing.business.PermissionAPI;
 import com.dotmarketing.cache.FieldsCache;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.common.db.DotConnect;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotRuntimeException;
@@ -54,7 +52,6 @@ import com.dotmarketing.portlets.structure.model.FieldVariable;
 import com.dotmarketing.portlets.structure.model.KeyValueFieldUtil;
 import com.dotmarketing.portlets.structure.model.Relationship;
 import com.dotmarketing.portlets.structure.model.Structure;
-import com.dotmarketing.portlets.workflows.model.WorkflowStep;
 import com.dotmarketing.portlets.workflows.model.WorkflowTask;
 import com.dotmarketing.tag.model.Tag;
 import com.dotmarketing.util.Config;
@@ -266,7 +263,7 @@ public class ESMappingAPIImpl implements ContentMappingAPI {
 
 			Identifier ident = APILocator.getIdentifierAPI().find(con);
 			ContentletVersionInfo cvi = APILocator.getVersionableAPI().getContentletVersionInfo(ident.getId(), con.getLanguageId());
-			Structure st=StructureCache.getStructureByInode(con.getStructureInode());
+			Structure st=CacheLocator.getContentTypeCache().getStructureByInode(con.getStructureInode());
 
 			Folder conFolder=APILocator.getFolderAPI().findFolderByPath(ident.getParentPath(), ident.getHostId(), APILocator.getUserAPI().getSystemUser(), false);
 
@@ -333,7 +330,7 @@ public class ESMappingAPIImpl implements ContentMappingAPI {
 
             for(Entry<String,String> entry : m.entrySet()){
                 final String lcasek=entry.getKey().toLowerCase();
-                final String lcasev=entry.getValue()!=null ? entry.getValue().toLowerCase() : "";
+				final String lcasev = UtilMethods.isSet(entry.getValue()) ? entry.getValue().toLowerCase() : null;
                 mlowered.put(lcasek, lcasev);
                 mlowered.put(lcasek + "_dotraw", lcasev);
             }
@@ -354,6 +351,7 @@ public class ESMappingAPIImpl implements ContentMappingAPI {
 			//The url is now stored under the identifier for html pages, so we need to index that also.
 			if(con.getStructure().getStructureType() == Structure.STRUCTURE_TYPE_HTMLPAGE){
 				mlowered.put(con.getStructure().getVelocityVarName().toLowerCase() + ".url", ident.getAssetName());
+				mlowered.put(con.getStructure().getVelocityVarName().toLowerCase() + ".url_dotraw", ident.getAssetName());
 			}
 
             return mlowered;
@@ -372,7 +370,7 @@ public class ESMappingAPIImpl implements ContentMappingAPI {
 	protected void loadCategories(Contentlet con, Map<String,String> m) throws DotDataException, DotSecurityException {
 	    // first we check if there is a category field in the structure. We don't hit db if not needed
 	    boolean thereiscategory=false;
-	    Structure st=StructureCache.getStructureByInode(con.getStructureInode());
+	    Structure st=CacheLocator.getContentTypeCache().getStructureByInode(con.getStructureInode());
 	    List<Field> fields=FieldsCache.getFieldsByStructureInode(con.getStructureInode());
 	    for(Field f : fields)
 	        thereiscategory = thereiscategory ||
@@ -592,7 +590,7 @@ public class ESMappingAPIImpl implements ContentMappingAPI {
             }
         }
 	}
-	public String toJsonString(Map<String, Object> map) throws JsonGenerationException, JsonMappingException, IOException{
+	public String toJsonString(Map<String, Object> map) throws IOException{
 		return mapper.writeValueAsString(map);
 	}
 	public List<String> dependenciesLeftToReindex(Contentlet con) throws DotStateException, DotDataException, DotSecurityException {

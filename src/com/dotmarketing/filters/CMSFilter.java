@@ -1,6 +1,19 @@
 package com.dotmarketing.filters;
 
-import com.dotcms.repackage.org.owasp.esapi.errors.EncodingException;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.net.URLDecoder;
+import java.util.Set;
+
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import org.apache.commons.logging.LogFactory;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.business.APILocator;
@@ -10,20 +23,13 @@ import com.dotmarketing.cache.VirtualLinksCache;
 import com.dotmarketing.db.DbConnectionFactory;
 import com.dotmarketing.db.HibernateUtil;
 import com.dotmarketing.exception.DotDataException;
+import com.dotmarketing.portlets.rules.business.RulesEngine;
+import com.dotmarketing.portlets.rules.model.Rule;
 import com.dotmarketing.util.Config;
 import com.dotmarketing.util.Logger;
 import com.dotmarketing.util.UtilMethods;
 import com.dotmarketing.util.WebKeys;
 import com.liferay.util.Xss;
-import org.apache.commons.logging.LogFactory;
-
-import javax.servlet.*;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.io.StringWriter;
-import java.net.URLDecoder;
-import java.util.Set;
 
 public class CMSFilter implements Filter {
 
@@ -34,6 +40,8 @@ public class CMSFilter implements Filter {
 	String ASSET_PATH = null;
 
 	CmsUrlUtil urlUtil = CmsUrlUtil.getInstance();
+
+    private RulesEngine rulesEngine;
 
 
 	enum IAm{
@@ -63,7 +71,8 @@ public class CMSFilter implements Filter {
 			response.sendRedirect(xssRedirect);
 			return;
 		}
-		
+
+
 		
 		IAm iAm = IAm.NOTHING_IN_THE_CMS;
 		
@@ -172,6 +181,18 @@ public class CMSFilter implements Filter {
 		// if we are not rewriting anything, use the uri
 		rewrite = (rewrite == null) ? uri : rewrite;
 
+		
+		// fire every_request rules
+		if(iAm == IAm.FILE || iAm== IAm.PAGE || rewrite.startsWith("/contentAsset/")){
+            rulesEngine.fireRules(request, response, Rule.FireOn.EVERY_REQUEST);
+            if(response.isCommitted()){
+                /* Some form of redirect, error, or the request has already been fulfilled in some fashion by one or more of the actionlets. */
+                return;
+            }
+		}
+		
+		
+		
 		if (iAm == IAm.FILE) {
 			Identifier ident = null;
 			try {
@@ -214,6 +235,7 @@ public class CMSFilter implements Filter {
 	
 	public void init(FilterConfig config) throws ServletException {
 		this.ASSET_PATH = APILocator.getFileAPI().getRelativeAssetsRootPath();
+        rulesEngine = new RulesEngine();
 
 	}
 	@Deprecated
@@ -265,7 +287,7 @@ public class CMSFilter implements Filter {
 			Logger.warn(this, "XSS Found in request URI: " +uri );
 			try {
 				rewrite = Xss.encodeForURL(uri);
-			} catch (EncodingException e) {
+			} catch (Exception e) {
 				Logger.error(this, "Encoding failure. Unable to encode URI " + uri);
 				throw new ServletException(e.getMessage(), e);
 			}

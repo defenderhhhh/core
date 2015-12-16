@@ -1,16 +1,5 @@
 package com.dotcms.rest;
 
-import java.io.File;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-import javax.servlet.http.HttpServletRequest;
-
 import com.dotcms.cluster.bean.Server;
 import com.dotcms.cluster.bean.ServerPort;
 import com.dotcms.cluster.business.ServerAPI;
@@ -31,18 +20,19 @@ import com.dotcms.repackage.javax.ws.rs.core.Context;
 import com.dotcms.repackage.javax.ws.rs.core.MediaType;
 import com.dotcms.repackage.javax.ws.rs.core.Response;
 import com.dotcms.repackage.org.apache.commons.io.IOUtils;
-import com.dotcms.repackage.org.elasticsearch.action.ActionFuture;
-import com.dotcms.repackage.org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
-import com.dotcms.repackage.org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
-import com.dotcms.repackage.org.elasticsearch.action.admin.cluster.health.ClusterHealthStatus;
-import com.dotcms.repackage.org.elasticsearch.client.AdminClient;
+import org.elasticsearch.action.ActionFuture;
+import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
+import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
+import org.elasticsearch.action.admin.cluster.health.ClusterHealthStatus;
+import org.elasticsearch.client.AdminClient;
 import com.dotcms.repackage.org.jgroups.Address;
 import com.dotcms.repackage.org.jgroups.JChannel;
 import com.dotcms.repackage.org.jgroups.View;
 import com.dotmarketing.business.APILocator;
 import com.dotmarketing.business.CacheLocator;
-import com.dotmarketing.business.DotGuavaCacheAdministratorImpl;
 import com.dotmarketing.business.DotStateException;
+import com.dotmarketing.business.cache.transport.CacheTransport;
+import com.dotmarketing.business.jgroups.JGroupsCacheTransport;
 import com.dotmarketing.db.HibernateUtil;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotHibernateException;
@@ -53,12 +43,23 @@ import com.dotmarketing.util.UtilMethods;
 import com.dotmarketing.util.json.JSONArray;
 import com.dotmarketing.util.json.JSONException;
 import com.dotmarketing.util.json.JSONObject;
+import java.io.File;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import javax.servlet.http.HttpServletRequest;
 
 
 @Path("/cluster")
-public class ClusterResource extends WebResource {
+public class ClusterResource {
 
-	 /**
+    private final WebResource webResource = new WebResource();
+
+    /**
      * Returns a Map of the Cache Cluster Status
      *
      * @param request
@@ -74,11 +75,20 @@ public class ClusterResource extends WebResource {
     @Produces ("application/json")
     public Response getCacheClusterStatus ( @Context HttpServletRequest request, @PathParam ("params") String params ) throws DotStateException, DotDataException, DotSecurityException, JSONException {
 
-        InitDataObject initData = init( params, true, request, false, "9" );
+        InitDataObject initData = webResource.init( params, true, request, false, "9" );
         ResourceResponse responseResource = new ResourceResponse( initData.getParamsMap() );
-        View view = ((DotGuavaCacheAdministratorImpl)CacheLocator.getCacheAdministrator().getImplementationObject()).getView();
-        JChannel channel = ((DotGuavaCacheAdministratorImpl)CacheLocator.getCacheAdministrator().getImplementationObject()).getChannel();
-        JSONObject jsonClusterStatusObject = new JSONObject();
+
+		// JGroups Cache
+		CacheTransport cacheTransport = CacheLocator.getCacheAdministrator().getImplementationObject().getTransport();
+		View view = null;
+		JChannel channel = null;
+		if ( cacheTransport != null ) {
+			JGroupsCacheTransport cacheTransportImplementation = (JGroupsCacheTransport) cacheTransport;
+			view = cacheTransportImplementation.getView();
+			channel = cacheTransportImplementation.getChannel();
+		}
+
+       	JSONObject jsonClusterStatusObject = new JSONObject();
 
         if(view!=null) {
         	List<Address> members = view.getMembers();
@@ -113,7 +123,7 @@ public class ClusterResource extends WebResource {
     @Produces ("application/json")
     public Response getNodesInfo ( @Context HttpServletRequest request, @PathParam ("params") String params ) throws DotStateException, DotDataException, DotSecurityException, JSONException {
 
-        InitDataObject initData = init( params, true, request, false, "9");
+        InitDataObject initData = webResource.init( params, true, request, false, "9");
         ResourceResponse responseResource = new ResourceResponse( initData.getParamsMap() );
         
         ServerAPI serverAPI = APILocator.getServerAPI();
@@ -260,7 +270,7 @@ public class ClusterResource extends WebResource {
     @Produces ("application/json")
     public Response getESClusterStatus ( @Context HttpServletRequest request, @PathParam ("params") String params ) throws DotStateException, DotDataException, DotSecurityException, JSONException {
 
-        InitDataObject initData = init( params, true, request, false, "9" );
+        InitDataObject initData = webResource.init( params, true, request, false, "9" );
         ResourceResponse responseResource = new ResourceResponse( initData.getParamsMap() );
 
         AdminClient client=null;
@@ -308,7 +318,7 @@ public class ClusterResource extends WebResource {
     @Produces ("application/json")
     public Response getNodeInfo ( @Context HttpServletRequest request, @PathParam ("params") String params ) throws DotStateException, DotDataException, DotSecurityException, JSONException {
 
-        InitDataObject initData = init( params, true, request, false, "9" );
+        InitDataObject initData = webResource.init( params, true, request, false, "9" );
 
         Map<String, String> paramsMap = initData.getParamsMap();
 		String remoteServerID = paramsMap.get("id");
@@ -421,7 +431,7 @@ public class ClusterResource extends WebResource {
     @Produces ("application/json")
     public Response getESConfigProperties ( @Context HttpServletRequest request, @PathParam ("params") String params ) throws DotStateException, DotDataException, DotSecurityException, JSONException {
 
-        InitDataObject initData = init( params, true, request, false, "9" );
+        InitDataObject initData = webResource.init( params, true, request, false, "9" );
         ResourceResponse responseResource = new ResourceResponse( initData.getParamsMap() );
 
         JSONObject jsonNode = new JSONObject();
@@ -456,7 +466,7 @@ public class ClusterResource extends WebResource {
     @Path ("/wirenode/{params:.*}")
     @Produces ("application/json")
     public Response wireNode ( @Context HttpServletRequest request, @PathParam ("params") String params ) throws DotStateException, DotDataException, DotSecurityException, JSONException {
-        InitDataObject initData = init( params, true, request, true, "9" );
+        InitDataObject initData = webResource.init( params, true, request, true, "9" );
 
         JSONObject jsonNode = new JSONObject();
 
@@ -508,7 +518,7 @@ public class ClusterResource extends WebResource {
     @Path("/licenseRepoStatus")
     @Produces("application/json")
     public Response getLicenseRepoStatus(@Context HttpServletRequest request, @PathParam ("params") String params) throws DotDataException, JSONException {
-        init( params, true, request, true );
+        webResource.init(params, true, request, true, null);
 
         JSONObject json=new JSONObject();
         json.put("total", LicenseUtil.getLicenseRepoTotal());
@@ -525,7 +535,7 @@ public class ClusterResource extends WebResource {
     @POST
     @Path("/remove/{params:.*}")
     public Response removeFromCluster(@Context HttpServletRequest request, @PathParam("params") String params) {
-        InitDataObject initData = init(params, true, request, true, "9");
+        InitDataObject initData = webResource.init(params, true, request, true, "9");
         String serverId = initData.getParamsMap().get("serverid");
         try {
         	HibernateUtil.startTransaction();

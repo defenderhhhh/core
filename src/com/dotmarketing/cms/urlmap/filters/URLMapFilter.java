@@ -28,12 +28,13 @@ import javax.servlet.http.HttpSession;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.DotCacheException;
 import com.dotmarketing.business.web.HostWebAPI;
 import com.dotmarketing.business.web.UserWebAPI;
 import com.dotmarketing.business.web.WebAPILocator;
 import com.dotmarketing.cache.FieldsCache;
-import com.dotmarketing.cache.StructureCache;
+import com.dotmarketing.cache.ContentTypeCacheImpl;
 import com.dotmarketing.cache.VirtualLinksCache;
 import com.dotmarketing.common.model.ContentletSearch;
 import com.dotmarketing.exception.DotDataException;
@@ -67,7 +68,7 @@ import com.liferay.portal.model.User;
  */
 public class URLMapFilter implements Filter {
 
-	private List<PatternCache> patternsCache = new ArrayList<PatternCache>();
+	private List<PatternCache> patternsCache = new ArrayList<>();
 	private ContentletAPI conAPI;
 	private UserWebAPI wuserAPI;
 	private HostWebAPI whostAPI;
@@ -129,14 +130,14 @@ public class URLMapFilter implements Filter {
 		long languageId = WebAPILocator.getLanguageWebAPI().getLanguage(request).getId();
 		
 		String mastRegEx = null;
-		StringBuilder query = null;
+		StringBuilder query;
 		try {
-			mastRegEx = StructureCache.getURLMasterPattern();
+			mastRegEx = CacheLocator.getContentTypeCache().getURLMasterPattern();
 		} catch (DotCacheException e2) {
 			Logger.error(URLMapFilter.class, e2.getMessage(), e2);
 		}
-		if (mastRegEx == null) {
-			synchronized (StructureCache.MASTER_STRUCTURE) {
+		if (mastRegEx == null || patternsCache.isEmpty()) {
+			synchronized (ContentTypeCacheImpl.MASTER_STRUCTURE) {
 				try {
 					mastRegEx = buildCacheObjects();
 				} catch (DotDataException e) {
@@ -173,7 +174,7 @@ public class URLMapFilter implements Filter {
 					query = new StringBuilder();
 					List<RegExMatch> groups = matches.get(0).getGroups();
 					List<String> fieldMatches = pc.getFieldMatches();
-					structure = StructureCache.getStructureByInode(pc.getStructureInode());
+					structure = CacheLocator.getContentTypeCache().getStructureByInode(pc.getStructureInode());
 					List<Field> fields = FieldsCache.getFieldsByStructureInode(structure.getInode());
 					query.append("+structureName:").append(structure.getVelocityVarName()).append(" +deleted:false ");
 					if (EDIT_MODE || ADMIN_MODE) {
@@ -306,7 +307,7 @@ public class URLMapFilter implements Filter {
 		whostAPI = WebAPILocator.getHostWebAPI();
 		
 		// persistant on disk cache makes this necessary
-		StructureCache.clearURLMasterPattern();
+		CacheLocator.getContentTypeCache().clearURLMasterPattern();
 		urlFallthrough = Config.getBooleanProperty("URLMAP_FALLTHROUGH", true);
 	}
 
@@ -372,7 +373,7 @@ public class URLMapFilter implements Filter {
 				}
 			}
 		});
-		StructureCache.addURLMasterPattern(masterRegEx.toString());
+		CacheLocator.getContentTypeCache().addURLMasterPattern(masterRegEx.toString());
 		return masterRegEx.toString();
 	}
 

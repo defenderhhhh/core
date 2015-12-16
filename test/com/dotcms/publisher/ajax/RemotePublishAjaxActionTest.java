@@ -11,8 +11,6 @@ import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,27 +31,29 @@ import com.dotcms.publisher.environment.bean.Environment;
 import com.dotcms.publisher.environment.business.EnvironmentAPI;
 import com.dotcms.publishing.BundlerUtil;
 import com.dotcms.publishing.PublisherConfig;
+import com.dotcms.repackage.javax.ws.rs.client.Client;
+import com.dotcms.repackage.javax.ws.rs.client.ClientBuilder;
+import com.dotcms.repackage.javax.ws.rs.client.Entity;
+import com.dotcms.repackage.javax.ws.rs.client.WebTarget;
+import com.dotcms.repackage.javax.ws.rs.core.Response;
 import com.dotcms.repackage.org.apache.commons.httpclient.HttpStatus;
 import com.dotcms.repackage.org.apache.commons.io.IOUtils;
-import com.dotcms.repackage.com.sun.jersey.api.client.Client;
-import com.dotcms.repackage.com.sun.jersey.api.client.ClientResponse;
-import com.dotcms.repackage.com.sun.jersey.api.client.WebResource;
-import com.dotcms.repackage.com.sun.jersey.api.client.config.ClientConfig;
-import com.dotcms.repackage.com.sun.jersey.api.client.config.DefaultClientConfig;
-import com.dotcms.repackage.com.sun.jersey.multipart.FormDataMultiPart;
-import com.dotcms.repackage.com.sun.jersey.multipart.file.FileDataBodyPart;
 import com.dotcms.repackage.javax.ws.rs.core.MediaType;
 import com.dotcms.repackage.junit.framework.Assert;
+import com.dotcms.repackage.org.glassfish.jersey.media.multipart.FormDataMultiPart;
+import com.dotcms.repackage.org.glassfish.jersey.media.multipart.MultiPartFeature;
+import com.dotcms.repackage.org.glassfish.jersey.media.multipart.file.FileDataBodyPart;
 import com.dotcms.repackage.org.junit.BeforeClass;
 import com.dotcms.repackage.org.junit.Test;
+import com.dotcms.rest.RestClientBuilder;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.beans.MultiTree;
 import com.dotmarketing.beans.Permission;
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.business.PermissionAPI;
 import com.dotmarketing.business.Role;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.cms.factories.PublicEncryptionFactory;
 import com.dotmarketing.db.HibernateUtil;
 import com.dotmarketing.exception.DotDataException;
@@ -280,9 +280,6 @@ public class RemotePublishAjaxActionTest extends TestBase {
 		assertTrue( newBundleFile.exists() );
 
 		//Prepare the post request
-		ClientConfig cc = new DefaultClientConfig();
-		Client client = Client.create( cc );
-
 		FormDataMultiPart form = new FormDataMultiPart();
 		form.field( "AUTH_TOKEN", PublicEncryptionFactory.encryptString( (PublicEncryptionFactory.decryptString( receivingFromEndpoint.getAuthKey().toString() )) ) );
 		form.field( "GROUP_ID", UtilMethods.isSet( receivingFromEndpoint.getGroupId() ) ? receivingFromEndpoint.getGroupId() : receivingFromEndpoint.getId() );
@@ -291,10 +288,12 @@ public class RemotePublishAjaxActionTest extends TestBase {
 		form.bodyPart( new FileDataBodyPart( "bundle", newBundleFile, MediaType.MULTIPART_FORM_DATA_TYPE ) );
 
 		//Sending bundle to endpoint
-		WebResource resource = client.resource( receivingFromEndpoint.toURL() + "/api/bundlePublisher/publish" );
-		ClientResponse clientResponse = resource.type( MediaType.MULTIPART_FORM_DATA ).post( ClientResponse.class, form );
+        Response clientResponse = ClientBuilder.newClient().register(MultiPartFeature.class)
+            .target(receivingFromEndpoint.toURL() + "/api/bundlePublisher/publish")
+            .request(MediaType.APPLICATION_JSON_TYPE)
+            .post(Entity.entity(form, form.getMediaType()));
 		//Validations
-		assertEquals( clientResponse.getClientResponseStatus().getStatusCode(), HttpStatus.SC_OK );
+		assertEquals( clientResponse.getStatus(), HttpStatus.SC_OK );
 
 		//Get current status dates
 		status = PublishAuditAPI.getInstance().getPublishAuditStatus( newBundleId );//Get the audit records related to this new bundle
@@ -383,7 +382,7 @@ public class RemotePublishAjaxActionTest extends TestBase {
 		/*
 		 * Create test contentlet
 		 */
-		Structure structure = StructureCache.getStructureByVelocityVarName("webPageContent");
+		Structure structure = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("webPageContent");
 		Contentlet contentlet = new Contentlet();
 		contentlet.setStructureInode(structure.getInode());
 		contentlet.setHost(host.getIdentifier());
@@ -701,7 +700,7 @@ public class RemotePublishAjaxActionTest extends TestBase {
 		/*
 		 * Create test contentlet1
 		 */
-		Structure structure = StructureCache.getStructureByVelocityVarName("webPageContent");
+		Structure structure = CacheLocator.getContentTypeCache().getStructureByVelocityVarName("webPageContent");
 		Contentlet contentlet1 = new Contentlet();
 		contentlet1.setStructureInode(structure.getInode());
 		contentlet1.setHost(host.getIdentifier());
@@ -960,8 +959,7 @@ public class RemotePublishAjaxActionTest extends TestBase {
 		/*
 		 * Prepare the post request
 		 */
-		ClientConfig cc = new DefaultClientConfig();
-		Client client = Client.create( cc );
+		Client client = RestClientBuilder.newClient();
 
 		FormDataMultiPart form = new FormDataMultiPart();
 		form.field( "AUTH_TOKEN", PublicEncryptionFactory.encryptString( (PublicEncryptionFactory.decryptString( receivingFromEndpoint.getAuthKey().toString() )) ) );

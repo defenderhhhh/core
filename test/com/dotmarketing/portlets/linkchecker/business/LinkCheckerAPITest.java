@@ -8,16 +8,16 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 
-import com.dotcms.repackage.org.junit.BeforeClass;
-import com.dotcms.repackage.org.junit.Test;
 import com.dotcms.LicenseTestUtil;
 import com.dotcms.TestBase;
+import com.dotcms.repackage.org.junit.BeforeClass;
+import com.dotcms.repackage.org.junit.Test;
 import com.dotmarketing.beans.ContainerStructure;
 import com.dotmarketing.beans.Host;
 import com.dotmarketing.beans.MultiTree;
 import com.dotmarketing.business.APILocator;
+import com.dotmarketing.business.CacheLocator;
 import com.dotmarketing.cache.FieldsCache;
-import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.db.HibernateUtil;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotSecurityException;
@@ -38,8 +38,15 @@ import com.dotmarketing.util.Config;
 import com.dotmarketing.util.UUIDGenerator;
 import com.liferay.portal.model.User;
 
-
-
+/**
+ * This class tests the Link Checker functionality provided in dotCMS. It
+ * traverses the contents in an HTML page looking for the URLs in the anchor
+ * tags and verifies if the URL they point to is valid or not.
+ * 
+ * @author Jorge Urdaneta
+ * @since Nov 8, 2012
+ *
+ */
 public class LinkCheckerAPITest extends TestBase {
 
     protected static User sysuser=null;
@@ -80,7 +87,7 @@ public class LinkCheckerAPITest extends TestBase {
             structure.setOwner(sysuser.getUserId());
             structure.setVelocityVarName("linkchecker_test_structure"+uuid.replaceAll("-", "_"));
             StructureFactory.saveStructure(structure);
-            StructureCache.addStructure(structure);
+            CacheLocator.getContentTypeCache().add(structure);
 
             field = new Field("html", Field.FieldType.WYSIWYG, Field.DataType.LONG_TEXT, structure,
                     true, true, true, 1, "", "", "", true, false, true);
@@ -125,7 +132,7 @@ public class LinkCheckerAPITest extends TestBase {
             urlmapstructure.setDetailPage(detailPage.getIdentifier());
             urlmapstructure.setUrlMapPattern("/test_mapped/{a}");
             StructureFactory.saveStructure(urlmapstructure);
-            StructureCache.addStructure(urlmapstructure);
+            CacheLocator.getContentTypeCache().add(urlmapstructure);
 
             urlmapfield = new Field("a", Field.FieldType.TEXT, Field.DataType.TEXT, urlmapstructure,
                     true, true, true, 1, "", "", "", true, false, true);
@@ -156,8 +163,8 @@ public class LinkCheckerAPITest extends TestBase {
 
             FieldFactory.deleteField(field);
             FieldFactory.deleteField(urlmapfield);
-            StructureFactory.deleteStructure(structure);
-            StructureFactory.deleteStructure(urlmapstructure);
+            APILocator.getStructureAPI().delete(structure, sysuser);
+            APILocator.getStructureAPI().delete(urlmapstructure, sysuser);
             APILocator.getHostAPI().archive(host, sysuser, false);
             APILocator.getHostAPI().delete(host, sysuser, false);
             APILocator.getHostAPI().archive(host2, sysuser, false);
@@ -212,10 +219,10 @@ public class LinkCheckerAPITest extends TestBase {
         Folder Fa=APILocator.getFolderAPI().findFolderByPath("/a_test/", host, sysuser, false);
         Folder Fab=APILocator.getFolderAPI().findFolderByPath("/a_test/b_test", host, sysuser, false);
 
-        IHTMLPage page1=createDummyPage("index","index", "index", template, Fa, null,false);
-        IHTMLPage page2=createDummyPage("something","something", "something", template, Fa, null,false);
-        IHTMLPage page3=createDummyPage("index","index", "index", template, Fab, null,false);
-        IHTMLPage page4=createDummyPage("something","something", "something", template, Fab, null,false);
+        IHTMLPage page1=createDummyPage("index","index", "index", template, Fa, host, true);
+        IHTMLPage page2=createDummyPage("something","something", "something", template, Fa, host, true);
+        IHTMLPage page3=createDummyPage("index","index", "index", template, Fab, host, true);
+        IHTMLPage page4=createDummyPage("something","something", "something", template, Fab, host, true);
         
         extlinks=new String[] {
             page1.getURI(), page2.getURI(), page3.getURI(), page4.getURI(), // direct hit!
@@ -426,6 +433,32 @@ public class LinkCheckerAPITest extends TestBase {
 
     }
     
+	/**
+	 * Creates a dummy page. This method is able to create both legacy HTML
+	 * Pages and the new Content Pages.
+	 * 
+	 * @param friendlyName
+	 *            - The human-readable page name.
+	 * @param URL
+	 *            - The name of the page in the URL.
+	 * @param title
+	 *            - The title of the HTML page.
+	 * @param template
+	 *            - The template that provides the layout of the page.
+	 * @param folder
+	 *            - The folder where the page will be placed.
+	 * @param host
+	 *            - The site where the page will be created.
+	 * @param isContent
+	 *            - If {@code true}, the page to create will be a Content Page.
+	 *            Otherwise, a legacy HTML page will be created.
+	 * @return The new {@link IHTML} page.
+	 * @throws DotDataException
+	 *             An error occurred when inserting information in the database.
+	 * @throws DotSecurityException
+	 *             The specified user does not have permission to perform the
+	 *             page creation action.
+	 */
     private IHTMLPage createDummyPage(String friendlyName, String URL, String title, Template template, Folder folder, Host host, boolean isContent) throws DotDataException, DotSecurityException{
     	if(isContent){
     		Contentlet contentAsset=new Contentlet();
