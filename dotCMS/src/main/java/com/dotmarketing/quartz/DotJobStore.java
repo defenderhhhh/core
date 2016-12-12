@@ -91,8 +91,12 @@ public class DotJobStore extends JobStoreCMT {
 		if (DbConnectionFactory.isMySql()) {
 			tablePrefix = tablePrefix.toLowerCase();
 		}else{
-		  sem.setUpdateLockRowSQL("UPDATE {0}LOCKS SET LOCK_NAME = LOCK_NAME WHERE LOCK_NAME = ?");
-		  sem.setTablePrefix(tablePrefix);
+			if (DbConnectionFactory.isMsSql()) {
+				sem.setUpdateLockRowSQL("UPDATE {0}LOCKS WITH (UPDLOCK ROWLOCK) SET LOCK_NAME = LOCK_NAME WHERE LOCK_NAME = ?");
+			} else {
+				sem.setUpdateLockRowSQL("UPDATE {0}LOCKS SET LOCK_NAME = LOCK_NAME WHERE LOCK_NAME = ?");
+			}
+			sem.setTablePrefix(tablePrefix);
 		}
 
 		//http://jira.dotmarketing.net/browse/DOTCMS-6699
