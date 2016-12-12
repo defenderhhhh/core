@@ -91,8 +91,8 @@ public class DotJobStore extends JobStoreCMT {
 		if (DbConnectionFactory.isMySql()) {
 			tablePrefix = tablePrefix.toLowerCase();
 		}else{
-		  sem.setUpdateLockRowSQL("UPDATE {0}LOCKS SET LOCK_NAME = LOCK_NAME WHERE LOCK_NAME = ?");
-		  sem.setTablePrefix(tablePrefix);
+			sem.setUpdateLockRowSQL("UPDATE {0}LOCKS SET LOCK_NAME = LOCK_NAME WHERE LOCK_NAME = ?");
+			sem.setTablePrefix(tablePrefix);
 		}
 
 		//http://jira.dotmarketing.net/browse/DOTCMS-6699
@@ -120,7 +120,8 @@ public class DotJobStore extends JobStoreCMT {
 		} else if (DbConnectionFactory.isMsSql()) {
 			try {
 				setDriverDelegateClass("org.quartz.impl.jdbcjobstore.DotMSSQLDelegate");
-				setLockHandler(sem);
+				MySQLLockSemaphore msSQLSem = new MySQLLockSemaphore(tablePrefix, "SELECT * FROM {0}LOCKS WITH (UPDLOCK ROWLOCK) WHERE LOCK_NAME = ?");
+				setLockHandler(msSQLSem);
 			} catch (Exception e) {
 				Logger.info(this, e.getMessage());
 			}
