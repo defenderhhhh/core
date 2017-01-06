@@ -45,10 +45,10 @@ div.contextPopupMenuBox{
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
-div.contextPopupMenuBox a{display: block; height: 32px; padding: 8px 8px 8px 16px; text-decoration: none; cursor: pointer; color: #555;}
+div.contextPopupMenuBox a{display: block; height: 32px; padding: 8px 8px 0 16px; text-decoration: none; cursor: pointer; color: #555;}
 div.contextPopupMenuBox a:hover{background-color: #fafafa; color: #555;}
 div.contextPopupMenuBox a img{display: none;}
 
 div.contextMenuHover {margin-left: 3px;}
-.pop_divider{border-bottom: 1px dashed #ECEDEE; background-color: #fff;}
+.pop_divider{border-bottom: 1px dotted #c0c0c0; background-color: #fff;}
 #newArrowHack {float: right;width: 16px;height: 16px;margin-right: 10px;background: url(/html/images/icons/arrow-000-medium.png);cursor: pointer;}
