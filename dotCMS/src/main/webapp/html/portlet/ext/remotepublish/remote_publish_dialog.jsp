@@ -127,7 +127,7 @@ String min = (cal.get(GregorianCalendar.MINUTE) < 10) ? "0"+cal.get(GregorianCal
 			<button dojoType="dijit.form.Button" iconClass="sServerIcon" onClick="pushHandler.remotePublish()" type="button" id="remotePublishSaveButton">
 				<%= UtilMethods.escapeSingleQuotes(LanguageUtil.get(pageContext, "publisher_dialog_push")) %>
 			</button>
-			<button dojoType="dijit.form.Button" iconClass="cancelIcon" onClick="window.lastSelectedEnvironments = pushHandler.inialStateEnvs; pushHandler.inialStateEnvs = new Array();dijit.byId('remotePublisherDia').hide()" type="button">
+			<button dojoType="dijit.form.Button" iconClass="cancelIcon" onClick="window.lastSelectedEnvironments = pushHandler.inialStateEnvs; pushHandler.inialStateEnvs = new Array();dijit.byId('remotePublisherDia').hide()" type="button" class="dijitButtonFlat">
 				<%= UtilMethods.escapeSingleQuotes(LanguageUtil.get(pageContext, "cancel")) %>
 			</button>
 
